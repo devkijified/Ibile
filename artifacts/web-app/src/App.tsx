@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { supabase } from './lib/supabase'
 import { Product, CartItem } from './types'
 import { toast, Toaster } from 'react-hot-toast'
-import { ShoppingCart, Plus, Minus, Trash2, Receipt, Search } from 'lucide-react'
 
 function App() {
   const [products, setProducts] = useState<Product[]>([])
@@ -11,26 +10,29 @@ function App() {
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'transfer' | 'pos'>('cash')
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('All')
+  const [loading, setLoading] = useState(true)
 
-  // Fetch products
   useEffect(() => {
     fetchProducts()
   }, [])
 
   async function fetchProducts() {
+    setLoading(true)
     const { data, error } = await supabase
       .from('products')
       .select('*')
       .order('name')
     
     if (error) {
-      toast.error('Error fetching products')
+      toast.error('Error fetching products: ' + error.message)
+      console.error('Supabase error:', error)
     } else {
+      console.log('Products loaded:', data?.length)
       setProducts(data || [])
     }
+    setLoading(false)
   }
 
-  // Add to cart
   const addToCart = (product: Product) => {
     const existing = cart.find(item => item.name === product.name)
     if (existing) {
@@ -50,7 +52,6 @@ function App() {
     toast.success(`${product.name} added`)
   }
 
-  // Update quantity
   const updateQuantity = (name: string, delta: number) => {
     setCart(cart.map(item => {
       if (item.name === name) {
@@ -65,18 +66,15 @@ function App() {
     }).filter(item => item.quantity > 0))
   }
 
-  // Remove from cart
   const removeItem = (name: string) => {
     setCart(cart.filter(item => item.name !== name))
     toast.success('Item removed')
   }
 
-  // Calculate totals
   const subtotal = cart.reduce((sum, item) => sum + item.total, 0)
   const tax = subtotal * 0.05
   const total = subtotal + tax
 
-  // Process sale
   const processSale = async () => {
     if (cart.length === 0) {
       toast.error('Cart is empty')
@@ -108,9 +106,9 @@ function App() {
     }
   }
 
-  // Filter products
+  // Filter products - fixed case insensitive search
   const filteredProducts = products.filter(product => {
-    const matchesSearch = product.name.toLowerCase().includes(search.toLowerCase())
+    const matchesSearch = search === '' || product.name.toLowerCase().includes(search.toLowerCase())
     const matchesCategory = category === 'All' || product.category === category
     return matchesSearch && matchesCategory
   })
@@ -124,24 +122,24 @@ function App() {
       <div className="flex flex-col lg:flex-row">
         {/* Products Section */}
         <div className="flex-1 p-6">
-          <h1 className="text-3xl font-bold mb-6">🍺 Ibile Bar & Grill - POS</h1>
+          <div className="mb-6">
+            <h1 className="text-3xl font-bold mb-2">Ibile Bar & Grill</h1>
+            <p className="text-gray-600">Point of Sale System</p>
+          </div>
           
           {/* Search and Filter */}
           <div className="flex gap-4 mb-6">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder="Search products..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border rounded-lg"
-              />
-            </div>
+            <input
+              type="text"
+              placeholder="Search products..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+            />
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="px-4 py-2 border rounded-lg"
+              className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
             >
               {categories.map(cat => (
                 <option key={cat} value={cat}>{cat}</option>
@@ -150,95 +148,105 @@ function App() {
           </div>
 
           {/* Products Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {filteredProducts.map(product => (
-              <button
-                key={product.id}
-                onClick={() => addToCart(product)}
-                className="bg-white p-4 rounded-lg shadow hover:shadow-lg transition text-left"
-              >
-                <h3 className="font-semibold text-lg">{product.name}</h3>
-                <p className="text-green-600 font-bold text-xl">₦{product.price.toLocaleString()}</p>
-                <p className="text-sm text-gray-500">Stock: {product.stock}</p>
-              </button>
-            ))}
-          </div>
+          {loading ? (
+            <div className="text-center py-20 text-gray-500">Loading products...</div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {filteredProducts.map(product => (
+                <button
+                  key={product.id}
+                  onClick={() => addToCart(product)}
+                  className="bg-white p-4 rounded-lg shadow hover:shadow-md transition text-left w-full"
+                >
+                  <h3 className="font-semibold text-lg">{product.name}</h3>
+                  <p className="text-green-600 font-bold text-xl mt-2">₦{product.price.toLocaleString()}</p>
+                  <p className="text-sm text-gray-500 mt-1">Stock: {product.stock}</p>
+                </button>
+              ))}
+              {filteredProducts.length === 0 && !loading && (
+                <div className="col-span-full text-center py-20 text-gray-500">
+                  No products found. {search && 'Try a different search term.'}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Cart Section */}
-        <div className="lg:w-96 bg-white shadow-lg p-6 flex flex-col lg:h-screen lg:sticky lg:top-0">
-          <div className="flex items-center gap-2 mb-6">
-            <ShoppingCart className="w-6 h-6" />
+        {/* Cart Section - Fixed scroll */}
+        <div className="lg:w-96 bg-white shadow-lg flex flex-col h-screen sticky top-0">
+          <div className="p-6 border-b">
             <h2 className="text-2xl font-bold">Current Order</h2>
           </div>
 
-          {/* Customer Input */}
-          <div className="mb-4">
+          <div className="p-6 border-b">
             <label className="block text-sm font-medium mb-1">Customer Name</label>
             <input
               type="text"
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg"
+              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
             />
           </div>
 
-          {/* Cart Items */}
-          <div className="flex-1 overflow-auto max-h-96 lg:max-h-full">
-            {cart.map(item => (
-              <div key={item.name} className="flex justify-between items-center mb-4 p-2 border rounded">
-                <div className="flex-1">
-                  <p className="font-semibold">{item.name}</p>
-                  <p className="text-sm text-gray-600">₦{item.price.toLocaleString()} each</p>
+          <div className="flex-1 overflow-y-auto p-6">
+            {cart.length === 0 ? (
+              <div className="text-center text-gray-500 py-10">Cart is empty</div>
+            ) : (
+              cart.map(item => (
+                <div key={item.name} className="flex justify-between items-center mb-4 p-3 border rounded-lg">
+                  <div className="flex-1">
+                    <p className="font-semibold">{item.name}</p>
+                    <p className="text-sm text-gray-600">₦{item.price.toLocaleString()} each</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => updateQuantity(item.name, -1)}
+                      className="w-8 h-8 bg-gray-200 rounded-lg hover:bg-gray-300 flex items-center justify-center"
+                    >
+                      -
+                    </button>
+                    <span className="w-8 text-center">{item.quantity}</span>
+                    <button
+                      onClick={() => updateQuantity(item.name, 1)}
+                      className="w-8 h-8 bg-gray-200 rounded-lg hover:bg-gray-300 flex items-center justify-center"
+                    >
+                      +
+                    </button>
+                    <button
+                      onClick={() => removeItem(item.name)}
+                      className="w-8 h-8 text-red-500 hover:text-red-700 flex items-center justify-center"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <div className="ml-4 font-semibold min-w-[80px] text-right">
+                    ₦{item.total.toLocaleString()}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => updateQuantity(item.name, -1)}
-                    className="p-1 bg-gray-200 rounded hover:bg-gray-300"
-                  >
-                    <Minus className="w-4 h-4" />
-                  </button>
-                  <span className="w-8 text-center">{item.quantity}</span>
-                  <button
-                    onClick={() => updateQuantity(item.name, 1)}
-                    className="p-1 bg-gray-200 rounded hover:bg-gray-300"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => removeItem(item.name)}
-                    className="p-1 text-red-500 hover:text-red-700"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-                <div className="ml-4 font-semibold">
-                  ₦{item.total.toLocaleString()}
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
 
-          {/* Totals */}
-          <div className="border-t pt-4 mt-4">
-            <div className="flex justify-between mb-2">
-              <span>Subtotal:</span>
-              <span>₦{subtotal.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between mb-2 text-sm text-gray-600">
-              <span>VAT (5%):</span>
-              <span>₦{tax.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between mb-4 text-xl font-bold">
-              <span>Total:</span>
-              <span>₦{total.toLocaleString()}</span>
+          <div className="p-6 border-t">
+            <div className="space-y-2 mb-4">
+              <div className="flex justify-between">
+                <span>Subtotal</span>
+                <span>₦{subtotal.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between text-sm text-gray-600">
+                <span>VAT (5%)</span>
+                <span>₦{tax.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between text-xl font-bold pt-2 border-t">
+                <span>Total</span>
+                <span>₦{total.toLocaleString()}</span>
+              </div>
             </div>
 
-            {/* Payment Method */}
             <select
               value={paymentMethod}
               onChange={(e) => setPaymentMethod(e.target.value as any)}
-              className="w-full px-3 py-2 border rounded-lg mb-4"
+              className="w-full px-3 py-2 border rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-green-500"
             >
               <option value="cash">Cash</option>
               <option value="card">Card</option>
@@ -246,12 +254,11 @@ function App() {
               <option value="pos">POS</option>
             </select>
 
-            {/* Process Button */}
             <button
               onClick={processSale}
-              className="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition flex items-center justify-center gap-2"
+              className="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition"
+              disabled={cart.length === 0}
             >
-              <Receipt className="w-5 h-5" />
               Complete Sale
             </button>
           </div>
