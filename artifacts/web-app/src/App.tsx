@@ -1,127 +1,264 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import NotFound from "@/pages/not-found";
-import { ArrowRight, Code2, Cpu, Database, Blocks, TerminalSquare, Github, LayoutTemplate, Layers, CheckCircle2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useState, useEffect } from 'react'
+import { supabase } from './lib/supabase'
+import { Product, CartItem } from './types'
+import { toast, Toaster } from 'react-hot-toast'
+import { ShoppingCart, Plus, Minus, Trash2, Receipt, Search } from 'lucide-react'
 
-const queryClient = new QueryClient();
+function App() {
+  const [products, setProducts] = useState<Product[]>([])
+  const [cart, setCart] = useState<CartItem[]>([])
+  const [customerName, setCustomerName] = useState('Walk-in Customer')
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'transfer' | 'pos'>('cash')
+  const [search, setSearch] = useState('')
+  const [category, setCategory] = useState('All')
 
-function Home() {
+  // Fetch products
+  useEffect(() => {
+    fetchProducts()
+  }, [])
+
+  async function fetchProducts() {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .order('name')
+    
+    if (error) {
+      toast.error('Error fetching products')
+    } else {
+      setProducts(data || [])
+    }
+  }
+
+  // Add to cart
+  const addToCart = (product: Product) => {
+    const existing = cart.find(item => item.name === product.name)
+    if (existing) {
+      setCart(cart.map(item =>
+        item.name === product.name
+          ? { ...item, quantity: item.quantity + 1, total: (item.quantity + 1) * item.price }
+          : item
+      ))
+    } else {
+      setCart([...cart, {
+        name: product.name,
+        quantity: 1,
+        price: product.price,
+        total: product.price
+      }])
+    }
+    toast.success(`${product.name} added`)
+  }
+
+  // Update quantity
+  const updateQuantity = (name: string, delta: number) => {
+    setCart(cart.map(item => {
+      if (item.name === name) {
+        const newQuantity = Math.max(0, item.quantity + delta)
+        return {
+          ...item,
+          quantity: newQuantity,
+          total: newQuantity * item.price
+        }
+      }
+      return item
+    }).filter(item => item.quantity > 0))
+  }
+
+  // Remove from cart
+  const removeItem = (name: string) => {
+    setCart(cart.filter(item => item.name !== name))
+    toast.success('Item removed')
+  }
+
+  // Calculate totals
+  const subtotal = cart.reduce((sum, item) => sum + item.total, 0)
+  const tax = subtotal * 0.05
+  const total = subtotal + tax
+
+  // Process sale
+  const processSale = async () => {
+    if (cart.length === 0) {
+      toast.error('Cart is empty')
+      return
+    }
+
+    const invoiceNumber = `INV-${Date.now()}`
+    
+    const { error } = await supabase
+      .from('invoices')
+      .insert([{
+        invoice_number: invoiceNumber,
+        customer_name: customerName,
+        items: cart,
+        subtotal: subtotal,
+        tax: tax,
+        discount: 0,
+        total: total,
+        payment_method: paymentMethod
+      }])
+
+    if (error) {
+      toast.error('Error processing sale')
+      console.error(error)
+    } else {
+      toast.success(`Sale complete! Invoice: ${invoiceNumber}`)
+      setCart([])
+      fetchProducts()
+    }
+  }
+
+  // Filter products
+  const filteredProducts = products.filter(product => {
+    const matchesSearch = product.name.toLowerCase().includes(search.toLowerCase())
+    const matchesCategory = category === 'All' || product.category === category
+    return matchesSearch && matchesCategory
+  })
+
+  const categories = ['All', ...new Set(products.map(p => p.category))]
+
   return (
-    <div className="min-h-screen w-full bg-background flex flex-col relative overflow-hidden">
-      {/* Decorative Background Elements */}
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-        <div className="absolute -top-[20%] -left-[10%] w-[50%] h-[50%] rounded-full bg-primary/5 blur-[120px]" />
-        <div className="absolute top-[60%] -right-[10%] w-[40%] h-[60%] rounded-full bg-primary/5 blur-[100px]" />
-        <div className="absolute top-[20%] left-[60%] w-[30%] h-[30%] rounded-full bg-primary/5 blur-[80px]" />
-      </div>
-
-      <div className="flex-1 flex flex-col items-center justify-center max-w-5xl mx-auto px-6 py-20 w-full relative z-10">
-        <div className="w-full flex flex-col items-center text-center animate-in fade-in slide-in-from-bottom-8 duration-1000 ease-out">
+    <div className="min-h-screen bg-gray-100">
+      <Toaster position="top-right" />
+      
+      <div className="flex flex-col lg:flex-row">
+        {/* Products Section */}
+        <div className="flex-1 p-6">
+          <h1 className="text-3xl font-bold mb-6">🍺 Ibile Bar & Grill - POS</h1>
           
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-sm font-medium mb-8">
-            <span className="flex h-2 w-2 relative">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
-            </span>
-            Workspace Ready
+          {/* Search and Filter */}
+          <div className="flex gap-4 mb-6">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <input
+                type="text"
+                placeholder="Search products..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border rounded-lg"
+              />
+            </div>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="px-4 py-2 border rounded-lg"
+            >
+              {categories.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
           </div>
 
-          <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-foreground mb-6 font-sans">
-            Your new <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-primary/60">React</span> stack
-          </h1>
-          
-          <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mb-12">
-            A production-ready foundation built with modern tools. Scalable, type-safe, and designed for developer happiness. Start building your next idea.
-          </p>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full max-w-3xl mb-16">
-            {[
-              { label: "React 19", icon: <Layers className="w-5 h-5" /> },
-              { label: "TypeScript", icon: <Code2 className="w-5 h-5" /> },
-              { label: "Tailwind CSS", icon: <LayoutTemplate className="w-5 h-5" /> },
-              { label: "Vite", icon: <Cpu className="w-5 h-5" /> }
-            ].map((stack, i) => (
-              <div 
-                key={stack.label} 
-                className="flex items-center gap-3 p-4 rounded-xl border border-border bg-card shadow-sm hover-elevate transition-all duration-300 animate-in fade-in zoom-in-95 fill-mode-both"
-                style={{ animationDelay: `${200 + i * 100}ms` }}
+          {/* Products Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {filteredProducts.map(product => (
+              <button
+                key={product.id}
+                onClick={() => addToCart(product)}
+                className="bg-white p-4 rounded-lg shadow hover:shadow-lg transition text-left"
               >
-                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                  {stack.icon}
+                <h3 className="font-semibold text-lg">{product.name}</h3>
+                <p className="text-green-600 font-bold text-xl">₦{product.price.toLocaleString()}</p>
+                <p className="text-sm text-gray-500">Stock: {product.stock}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Cart Section */}
+        <div className="lg:w-96 bg-white shadow-lg p-6 flex flex-col lg:h-screen lg:sticky lg:top-0">
+          <div className="flex items-center gap-2 mb-6">
+            <ShoppingCart className="w-6 h-6" />
+            <h2 className="text-2xl font-bold">Current Order</h2>
+          </div>
+
+          {/* Customer Input */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1">Customer Name</label>
+            <input
+              type="text"
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg"
+            />
+          </div>
+
+          {/* Cart Items */}
+          <div className="flex-1 overflow-auto max-h-96 lg:max-h-full">
+            {cart.map(item => (
+              <div key={item.name} className="flex justify-between items-center mb-4 p-2 border rounded">
+                <div className="flex-1">
+                  <p className="font-semibold">{item.name}</p>
+                  <p className="text-sm text-gray-600">₦{item.price.toLocaleString()} each</p>
                 </div>
-                <span className="font-semibold text-sm">{stack.label}</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => updateQuantity(item.name, -1)}
+                    className="p-1 bg-gray-200 rounded hover:bg-gray-300"
+                  >
+                    <Minus className="w-4 h-4" />
+                  </button>
+                  <span className="w-8 text-center">{item.quantity}</span>
+                  <button
+                    onClick={() => updateQuantity(item.name, 1)}
+                    className="p-1 bg-gray-200 rounded hover:bg-gray-300"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => removeItem(item.name)}
+                    className="p-1 text-red-500 hover:text-red-700"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="ml-4 font-semibold">
+                  ₦{item.total.toLocaleString()}
+                </div>
               </div>
             ))}
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-4 w-full justify-center animate-in fade-in slide-in-from-bottom-4 duration-700 delay-500 fill-mode-both">
-            <Button size="lg" className="h-12 px-8 rounded-full gap-2 text-base shadow-lg shadow-primary/20">
-              <TerminalSquare className="w-5 h-5" />
-              Open Terminal
-            </Button>
-            <Button size="lg" variant="outline" className="h-12 px-8 rounded-full gap-2 text-base bg-background/50 backdrop-blur-sm">
-              <Database className="w-5 h-5" />
-              Database Schema
-            </Button>
+          {/* Totals */}
+          <div className="border-t pt-4 mt-4">
+            <div className="flex justify-between mb-2">
+              <span>Subtotal:</span>
+              <span>₦{subtotal.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between mb-2 text-sm text-gray-600">
+              <span>VAT (5%):</span>
+              <span>₦{tax.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between mb-4 text-xl font-bold">
+              <span>Total:</span>
+              <span>₦{total.toLocaleString()}</span>
+            </div>
+
+            {/* Payment Method */}
+            <select
+              value={paymentMethod}
+              onChange={(e) => setPaymentMethod(e.target.value as any)}
+              className="w-full px-3 py-2 border rounded-lg mb-4"
+            >
+              <option value="cash">Cash</option>
+              <option value="card">Card</option>
+              <option value="transfer">Bank Transfer</option>
+              <option value="pos">POS</option>
+            </select>
+
+            {/* Process Button */}
+            <button
+              onClick={processSale}
+              className="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition flex items-center justify-center gap-2"
+            >
+              <Receipt className="w-5 h-5" />
+              Complete Sale
+            </button>
           </div>
         </div>
-
-        <div className="mt-24 w-full grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-700 fill-mode-both">
-          <div className="p-6 rounded-2xl border border-border bg-card/50 backdrop-blur-md">
-            <h3 className="text-lg font-bold mb-2 flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5 text-primary" />
-              Configured & Ready
-            </h3>
-            <ul className="space-y-3 text-muted-foreground text-sm mt-4 font-mono">
-              <li className="flex items-center gap-3"><span className="text-primary">→</span> API Client & Zod Schemas</li>
-              <li className="flex items-center gap-3"><span className="text-primary">→</span> Drizzle ORM Setup</li>
-              <li className="flex items-center gap-3"><span className="text-primary">→</span> Shadcn UI Components</li>
-              <li className="flex items-center gap-3"><span className="text-primary">→</span> React Query configured</li>
-            </ul>
-          </div>
-          
-          <div className="p-6 rounded-2xl border border-border bg-card/50 backdrop-blur-md">
-            <h3 className="text-lg font-bold mb-2 flex items-center gap-2">
-              <Blocks className="w-5 h-5 text-primary" />
-              Next Steps
-            </h3>
-            <ul className="space-y-3 text-muted-foreground text-sm mt-4">
-              <li className="flex items-center gap-3"><span className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold">1</span> Define your schema in <code className="text-xs bg-muted px-1.5 py-0.5 rounded">lib/db/src/schema</code></li>
-              <li className="flex items-center gap-3"><span className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold">2</span> Build routes in <code className="text-xs bg-muted px-1.5 py-0.5 rounded">artifacts/api-server</code></li>
-              <li className="flex items-center gap-3"><span className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold">3</span> Generate API client hooks</li>
-              <li className="flex items-center gap-3"><span className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold">4</span> Build UI in <code className="text-xs bg-muted px-1.5 py-0.5 rounded">artifacts/web-app</code></li>
-            </ul>
-          </div>
-        </div>
-
       </div>
     </div>
-  );
+  )
 }
 
-function Router() {
-  return (
-    <Switch>
-      <Route path="/" component={Home} />
-      <Route component={NotFound} />
-    </Switch>
-  );
-}
-
-function App() {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
-        </WouterRouter>
-        <Toaster />
-      </TooltipProvider>
-    </QueryClientProvider>
-  );
-}
-
-export default App;
+export default App
