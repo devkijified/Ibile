@@ -29,17 +29,12 @@ function App() {
       .from('products')
       .select('*')
       .order('name')
-      // Add this to bypass cache
-      .override('headers', { 
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache'
-      })
     
     if (error) {
       toast.error('Error fetching products')
       console.error(error)
     } else {
-      console.log('Fetched products with stocks:', data?.map(p => ({ name: p.name, stock: p.stock })))
+      console.log('Fetched products:', data?.map(p => ({ name: p.name, stock: p.stock })))
       setProducts(data || [])
     }
     setLoading(false)
