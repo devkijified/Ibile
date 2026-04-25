@@ -2,42 +2,26 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { Toaster, toast } from 'react-hot-toast'
 
-interface LoginProps {
-  onLogin: () => void
-}
-
-function Login({ onLogin }: LoginProps) {
+function Login({ onLogin }: { onLogin: () => void }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [isSignUp, setIsSignUp] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
 
-    if (isSignUp) {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-      })
-      if (error) {
-        toast.error(error.message)
-      } else {
-        toast.success('Account created! Please sign in.')
-        setIsSignUp(false)
-      }
+    // Only sign in, no sign up
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+    
+    if (error) {
+      toast.error(error.message)
     } else {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
-      if (error) {
-        toast.error(error.message)
-      } else {
-        toast.success('Logged in successfully')
-        onLogin()
-      }
+      toast.success('Logged in successfully')
+      onLogin()
     }
     setLoading(false)
   }
@@ -48,7 +32,7 @@ function Login({ onLogin }: LoginProps) {
       <div className="bg-white p-8 rounded-lg shadow-md w-96">
         <div className="text-center mb-6">
           <h1 className="text-3xl font-bold">Ibile Bar & Grill</h1>
-          <p className="text-gray-600 mt-2">{isSignUp ? 'Create Account' : 'Staff Login'}</p>
+          <p className="text-gray-600 mt-2">Staff Login</p>
         </div>
         
         <form onSubmit={handleSubmit}>
@@ -79,16 +63,13 @@ function Login({ onLogin }: LoginProps) {
             disabled={loading}
             className="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 disabled:opacity-50"
           >
-            {loading ? 'Loading...' : (isSignUp ? 'Sign Up' : 'Sign In')}
+            {loading ? 'Loading...' : 'Sign In'}
           </button>
         </form>
         
-        <button
-          onClick={() => setIsSignUp(!isSignUp)}
-          className="w-full text-center text-sm text-gray-600 mt-4 hover:text-gray-800"
-        >
-          {isSignUp ? 'Already have an account? Sign In' : 'Need an account? Sign Up'}
-        </button>
+        <div className="mt-4 text-center text-sm text-gray-500">
+          Contact administrator for account access
+        </div>
       </div>
     </div>
   )
