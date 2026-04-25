@@ -17,7 +17,6 @@ function App() {
 
   useEffect(() => {
     fetchProducts()
-    // Check if admin (for demo, prompt for password)
     const adminPass = prompt('Enter admin PIN to enable VAT control (default: 1234)')
     if (adminPass === '1234') {
       setIsAdmin(true)
@@ -41,11 +40,21 @@ function App() {
   }
 
   const addToCart = (product: Product) => {
+    if (product.stock <= 0) {
+      toast.error(`${product.name} is out of stock`)
+      return
+    }
+    
     const existing = cart.find(item => item.name === product.name)
     if (existing) {
+      const newQuantity = existing.quantity + 1
+      if (newQuantity > product.stock) {
+        toast.error(`Only ${product.stock} ${product.name} available`)
+        return
+      }
       setCart(cart.map(item =>
         item.name === product.name
-          ? { ...item, quantity: item.quantity + 1, total: (item.quantity + 1) * item.price }
+          ? { ...item, quantity: newQuantity, total: newQuantity * item.price }
           : item
       ))
     } else {
@@ -60,17 +69,26 @@ function App() {
   }
 
   const updateQuantity = (name: string, delta: number) => {
-    setCart(cart.map(item => {
-      if (item.name === name) {
-        const newQuantity = Math.max(0, item.quantity + delta)
-        return {
-          ...item,
-          quantity: newQuantity,
-          total: newQuantity * item.price
-        }
-      }
-      return item
-    }).filter(item => item.quantity > 0))
+    const product = products.find(p => p.name === name)
+    if (!product) return
+    
+    const currentItem = cart.find(item => item.name === name)
+    const newQuantity = (currentItem?.quantity || 0) + delta
+    
+    if (newQuantity > product.stock) {
+      toast.error(`Only ${product.stock} ${name} available`)
+      return
+    }
+    
+    if (newQuantity <= 0) {
+      setCart(cart.filter(item => item.name !== name))
+    } else {
+      setCart(cart.map(item =>
+        item.name === name
+          ? { ...item, quantity: newQuantity, total: newQuantity * item.price }
+          : item
+      ))
+    }
   }
 
   const removeItem = (name: string) => {
@@ -90,7 +108,7 @@ function App() {
 
     const invoiceNumber = `INV-${Date.now()}`
     
-    // Start a transaction to update stock and create invoice
+    // Create invoice
     const { error: invoiceError } = await supabase
       .from('invoices')
       .insert([{
@@ -111,12 +129,11 @@ function App() {
       return
     }
 
-    // Update stock for each item in cart
-    const stockUpdates = cart.map(async (item) => {
-      // Find the product by name to get its current stock
+    // Update stock for each item
+    for (const item of cart) {
       const product = products.find(p => p.name === item.name)
       if (product) {
-        const newStock = Math.max(0, product.stock - item.quantity)
+        const newStock = product.stock - item.quantity
         const { error: stockError } = await supabase
           .from('products')
           .update({ stock: newStock })
@@ -124,17 +141,14 @@ function App() {
         
         if (stockError) {
           console.error(`Stock error for ${item.name}:`, stockError)
+          toast.error(`Failed to update stock for ${item.name}`)
         }
-        return stockError
       }
-      return null
-    })
-
-    await Promise.all(stockUpdates)
+    }
     
     toast.success(`Sale complete! Invoice: ${invoiceNumber}`)
     setCart([])
-    fetchProducts() // Refresh products to show updated stock
+    fetchProducts()
   }
 
   const filteredProducts = products.filter(product => {
@@ -211,11 +225,14 @@ function App() {
                 <button
                   key={product.id}
                   onClick={() => addToCart(product)}
-                  className="bg-white p-4 rounded-lg shadow hover:shadow-md transition text-left w-full"
+                  className={`bg-white p-4 rounded-lg shadow hover:shadow-md transition text-left w-full ${product.stock <= 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  disabled={product.stock <= 0}
                 >
                   <h3 className="font-semibold text-lg">{product.name}</h3>
                   <p className="text-green-600 font-bold text-xl mt-2">₦{product.price.toLocaleString()}</p>
-                  <p className="text-sm text-gray-500 mt-1">Stock: {product.stock}</p>
+                  <p className={`text-sm mt-1 ${product.stock <= 5 ? 'text-red-500 font-semibold' : 'text-gray-500'}`}>
+                    Stock: {product.stock}
+                  </p>
                 </button>
               ))}
               {filteredProducts.length === 0 && (
@@ -246,38 +263,42 @@ function App() {
             {cart.length === 0 ? (
               <div className="text-center text-gray-500 py-10">Cart is empty</div>
             ) : (
-              cart.map(item => (
-                <div key={item.name} className="flex justify-between items-center mb-4 p-3 border rounded-lg">
-                  <div className="flex-1">
-                    <p className="font-semibold">{item.name}</p>
-                    <p className="text-sm text-gray-600">₦{item.price.toLocaleString()} each</p>
+              cart.map(item => {
+                const product = products.find(p => p.name === item.name)
+                return (
+                  <div key={item.name} className="flex justify-between items-center mb-4 p-3 border rounded-lg">
+                    <div className="flex-1">
+                      <p className="font-semibold">{item.name}</p>
+                      <p className="text-sm text-gray-600">₦{item.price.toLocaleString()} each</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => updateQuantity(item.name, -1)}
+                        className="w-8 h-8 bg-gray-200 rounded-lg hover:bg-gray-300 flex items-center justify-center"
+                      >
+                        -
+                      </button>
+                      <span className="w-8 text-center">{item.quantity}</span>
+                      <button
+                        onClick={() => updateQuantity(item.name, 1)}
+                        className="w-8 h-8 bg-gray-200 rounded-lg hover:bg-gray-300 flex items-center justify-center"
+                        disabled={product && item.quantity >= product.stock}
+                      >
+                        +
+                      </button>
+                      <button
+                        onClick={() => removeItem(item.name)}
+                        className="w-8 h-8 text-red-500 hover:text-red-700 flex items-center justify-center text-xl"
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <div className="ml-4 font-semibold min-w-[80px] text-right">
+                      ₦{item.total.toLocaleString()}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => updateQuantity(item.name, -1)}
-                      className="w-8 h-8 bg-gray-200 rounded-lg hover:bg-gray-300 flex items-center justify-center"
-                    >
-                      -
-                    </button>
-                    <span className="w-8 text-center">{item.quantity}</span>
-                    <button
-                      onClick={() => updateQuantity(item.name, 1)}
-                      className="w-8 h-8 bg-gray-200 rounded-lg hover:bg-gray-300 flex items-center justify-center"
-                    >
-                      +
-                    </button>
-                    <button
-                      onClick={() => removeItem(item.name)}
-                      className="w-8 h-8 text-red-500 hover:text-red-700 flex items-center justify-center text-xl"
-                    >
-                      ×
-                    </button>
-                  </div>
-                  <div className="ml-4 font-semibold min-w-[80px] text-right">
-                    ₦{item.total.toLocaleString()}
-                  </div>
-                </div>
-              ))
+                )
+              })
             )}
           </div>
 
