@@ -90,32 +90,51 @@ function App() {
 
     const invoiceNumber = `INV-${Date.now()}`
     
-    const saleData = {
-      invoice_number: invoiceNumber,
-      customer_name: customerName,
-      items: cart,
-      subtotal: subtotal,
-      tax: tax,
-      discount: 0,
-      total: total,
-      payment_method: paymentMethod,
-      status: 'completed'
-    }
-    
-    console.log('Processing sale:', saleData)
-    
-    const { error } = await supabase
+    // Start a transaction to update stock and create invoice
+    const { error: invoiceError } = await supabase
       .from('invoices')
-      .insert([saleData])
+      .insert([{
+        invoice_number: invoiceNumber,
+        customer_name: customerName,
+        items: cart,
+        subtotal: subtotal,
+        tax: tax,
+        discount: 0,
+        total: total,
+        payment_method: paymentMethod,
+        status: 'completed'
+      }])
 
-    if (error) {
-      console.error('Supabase error:', error)
-      toast.error(`Error: ${error.message}`)
-    } else {
-      toast.success(`Sale complete! Invoice: ${invoiceNumber}`)
-      setCart([])
-      fetchProducts()
+    if (invoiceError) {
+      console.error('Invoice error:', invoiceError)
+      toast.error(`Error: ${invoiceError.message}`)
+      return
     }
+
+    // Update stock for each item in cart
+    const stockUpdates = cart.map(async (item) => {
+      // Find the product by name to get its current stock
+      const product = products.find(p => p.name === item.name)
+      if (product) {
+        const newStock = Math.max(0, product.stock - item.quantity)
+        const { error: stockError } = await supabase
+          .from('products')
+          .update({ stock: newStock })
+          .eq('id', product.id)
+        
+        if (stockError) {
+          console.error(`Stock error for ${item.name}:`, stockError)
+        }
+        return stockError
+      }
+      return null
+    })
+
+    await Promise.all(stockUpdates)
+    
+    toast.success(`Sale complete! Invoice: ${invoiceNumber}`)
+    setCart([])
+    fetchProducts() // Refresh products to show updated stock
   }
 
   const filteredProducts = products.filter(product => {
