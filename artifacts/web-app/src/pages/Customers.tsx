@@ -1,0 +1,166 @@
+import { useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
+import { Toaster, toast } from 'react-hot-toast'
+
+interface Customer {
+  id: string
+  name: string
+  email: string
+  phone: string
+  loyalty_points: number
+  total_spent: number
+  outstanding_balance: number
+}
+
+function Customers() {
+  const [customers, setCustomers] = useState<Customer[]>([])
+  const [search, setSearch] = useState('')
+  const [showModal, setShowModal] = useState(false)
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    phone: ''
+  })
+
+  useEffect(() => {
+    fetchCustomers()
+  }, [])
+
+  async function fetchCustomers() {
+    const { data, error } = await supabase
+      .from('customers')
+      .select('*')
+      .order('name')
+    
+    if (error) {
+      toast.error('Error fetching customers')
+    } else {
+      setCustomers(data || [])
+    }
+  }
+
+  async function createCustomer() {
+    const { error } = await supabase
+      .from('customers')
+      .insert([{
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        loyalty_points: 0,
+        total_spent: 0,
+        outstanding_balance: 0
+      }])
+
+    if (error) {
+      toast.error(error.message)
+    } else {
+      toast.success('Customer created')
+      setShowModal(false)
+      setFormData({ name: '', email: '', phone: '' })
+      fetchCustomers()
+    }
+  }
+
+  const filteredCustomers = customers.filter(c => 
+    c.name.toLowerCase().includes(search.toLowerCase()) ||
+    c.phone.includes(search)
+  )
+
+  return (
+    <div className="p-6">
+      <Toaster />
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">Customers</h1>
+        <button
+          onClick={() => setShowModal(true)}
+          className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+        >
+          + New Customer
+        </button>
+      </div>
+
+      <div className="mb-4">
+        <input
+          type="text"
+          placeholder="Search by name or phone..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full px-4 py-2 border rounded-lg"
+        />
+      </div>
+
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <table className="w-full">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-sm font-medium text-gray-500">Name</th>
+              <th className="px-6 py-3 text-left text-sm font-medium text-gray-500">Phone</th>
+              <th className="px-6 py-3 text-right text-sm font-medium text-gray-500">Loyalty Points</th>
+              <th className="px-6 py-3 text-right text-sm font-medium text-gray-500">Outstanding</th>
+              <th className="px-6 py-3 text-right text-sm font-medium text-gray-500">Total Spent</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {filteredCustomers.map(customer => (
+              <tr key={customer.id} className="hover:bg-gray-50 cursor-pointer">
+                <td className="px-6 py-4">{customer.name}</td>
+                <td className="px-6 py-4">{customer.phone}</td>
+                <td className="px-6 py-4 text-right font-semibold">{customer.loyalty_points}</td>
+                <td className="px-6 py-4 text-right text-red-600 font-semibold">
+                  ₦{customer.outstanding_balance?.toLocaleString() || 0}
+                </td>
+                <td className="px-6 py-4 text-right">₦{customer.total_spent?.toLocaleString() || 0}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-6 w-96">
+            <h2 className="text-xl font-bold mb-4">New Customer</h2>
+            <input
+              type="text"
+              placeholder="Name"
+              value={formData.name}
+              onChange={(e) => setFormData({...formData, name: e.target.value})}
+              className="w-full px-3 py-2 border rounded-lg mb-3"
+            />
+            <input
+              type="email"
+              placeholder="Email"
+              value={formData.email}
+              onChange={(e) => setFormData({...formData, email: e.target.value})}
+              className="w-full px-3 py-2 border rounded-lg mb-3"
+            />
+            <input
+              type="tel"
+              placeholder="Phone"
+              value={formData.phone}
+              onChange={(e) => setFormData({...formData, phone: e.target.value})}
+              className="w-full px-3 py-2 border rounded-lg mb-4"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={createCustomer}
+                className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700"
+              >
+                Create
+              </button>
+              <button
+                onClick={() => setShowModal(false)}
+                className="flex-1 bg-gray-300 py-2 rounded-lg hover:bg-gray-400"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default Customers
