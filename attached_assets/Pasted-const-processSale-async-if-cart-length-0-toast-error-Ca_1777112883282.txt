@@ -1,0 +1,76 @@
+const processSale = async () => {
+  if (cart.length === 0) {
+    toast.error('Cart is empty')
+    return
+  }
+
+  console.log('Starting sale process...')
+  console.log('Cart items:', cart)
+
+  const invoiceNumber = `INV-${Date.now()}`
+  
+  // Create invoice
+  const { data: invoiceData, error: invoiceError } = await supabase
+    .from('invoices')
+    .insert([{
+      invoice_number: invoiceNumber,
+      customer_name: customerName,
+      items: cart,
+      subtotal: subtotal,
+      tax: tax,
+      discount: 0,
+      total: total,
+      payment_method: paymentMethod,
+      status: 'completed'
+    }])
+    .select()
+
+  if (invoiceError) {
+    console.error('Invoice error:', invoiceError)
+    toast.error(`Error: ${invoiceError.message}`)
+    return
+  }
+
+  console.log('Invoice created:', invoiceData)
+
+  // Update stock for each item
+  let stockErrors = 0
+  
+  for (const item of cart) {
+    console.log(`Processing stock for: ${item.name}, quantity: ${item.quantity}`)
+    
+    const product = products.find(p => p.name === item.name)
+    console.log(`Found product:`, product)
+    
+    if (product) {
+      const newStock = product.stock - item.quantity
+      console.log(`Current stock: ${product.stock}, New stock: ${newStock}`)
+      
+      const { data: updateData, error: stockError } = await supabase
+        .from('products')
+        .update({ stock: newStock })
+        .eq('id', product.id)
+        .select()
+      
+      if (stockError) {
+        console.error(`Stock error for ${item.name}:`, stockError)
+        stockErrors++
+        toast.error(`Failed to update stock for ${item.name}`)
+      } else {
+        console.log(`Stock updated for ${item.name}:`, updateData)
+        toast.success(`Stock updated: ${item.name} now ${newStock}`)
+      }
+    } else {
+      console.error(`Product not found: ${item.name}`)
+      stockErrors++
+    }
+  }
+  
+  if (stockErrors === 0) {
+    toast.success(`Sale complete! Invoice: ${invoiceNumber}`)
+    setCart([])
+    await fetchProducts() // Refresh products to show updated stock
+  } else {
+    toast.error(`Sale completed but ${stockErrors} stock updates failed`)
+  }
+}
