@@ -7,13 +7,21 @@ function App() {
   const [products, setProducts] = useState<Product[]>([])
   const [cart, setCart] = useState<CartItem[]>([])
   const [customerName, setCustomerName] = useState('Walk-in Customer')
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'transfer' | 'pos'>('cash')
+  const [paymentMethod, setPaymentMethod] = useState('cash')
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('All')
   const [loading, setLoading] = useState(true)
+  const [vatEnabled, setVatEnabled] = useState(true)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [showAdminPanel, setShowAdminPanel] = useState(false)
 
   useEffect(() => {
     fetchProducts()
+    // Check if admin (for demo, prompt for password)
+    const adminPass = prompt('Enter admin PIN to enable VAT control (default: 1234)')
+    if (adminPass === '1234') {
+      setIsAdmin(true)
+    }
   }, [])
 
   async function fetchProducts() {
@@ -71,7 +79,7 @@ function App() {
   }
 
   const subtotal = cart.reduce((sum, item) => sum + item.total, 0)
-  const tax = subtotal * 0.05
+  const tax = vatEnabled ? subtotal * 0.05 : 0
   const total = subtotal + tax
 
   const processSale = async () => {
@@ -82,22 +90,27 @@ function App() {
 
     const invoiceNumber = `INV-${Date.now()}`
     
+    const saleData = {
+      invoice_number: invoiceNumber,
+      customer_name: customerName,
+      items: cart,
+      subtotal: subtotal,
+      tax: tax,
+      discount: 0,
+      total: total,
+      payment_method: paymentMethod,
+      status: 'completed'
+    }
+    
+    console.log('Processing sale:', saleData)
+    
     const { error } = await supabase
       .from('invoices')
-      .insert([{
-        invoice_number: invoiceNumber,
-        customer_name: customerName,
-        items: cart,
-        subtotal: subtotal,
-        tax: tax,
-        discount: 0,
-        total: total,
-        payment_method: paymentMethod
-      }])
+      .insert([saleData])
 
     if (error) {
-      toast.error('Error processing sale')
-      console.error(error)
+      console.error('Supabase error:', error)
+      toast.error(`Error: ${error.message}`)
     } else {
       toast.success(`Sale complete! Invoice: ${invoiceNumber}`)
       setCart([])
@@ -119,10 +132,38 @@ function App() {
       
       <div className="flex flex-col lg:flex-row">
         <div className="flex-1 p-6">
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold mb-2">Ibile Bar & Grill</h1>
-            <p className="text-gray-600">Point of Sale System</p>
+          <div className="flex justify-between items-center mb-6">
+            <div>
+              <h1 className="text-3xl font-bold mb-2">Ibile Bar & Grill</h1>
+              <p className="text-gray-600">Point of Sale System</p>
+            </div>
+            {isAdmin && (
+              <button
+                onClick={() => setShowAdminPanel(!showAdminPanel)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                {showAdminPanel ? 'Hide Admin' : 'Admin Panel'}
+              </button>
+            )}
           </div>
+          
+          {showAdminPanel && isAdmin && (
+            <div className="bg-white p-4 rounded-lg shadow mb-6 border-l-4 border-blue-600">
+              <h3 className="font-bold mb-3">Admin Controls</h3>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={vatEnabled}
+                  onChange={(e) => setVatEnabled(e.target.checked)}
+                  className="w-5 h-5"
+                />
+                <span>Enable VAT (5%) on all sales</span>
+              </label>
+              <p className="text-sm text-gray-500 mt-2">
+                Current status: {vatEnabled ? 'VAT included' : 'No VAT applied'}
+              </p>
+            </div>
+          )}
           
           <div className="flex gap-4 mb-6">
             <input
@@ -227,10 +268,12 @@ function App() {
                 <span>Subtotal</span>
                 <span>₦{subtotal.toLocaleString()}</span>
               </div>
-              <div className="flex justify-between text-sm text-gray-600">
-                <span>VAT (5%)</span>
-                <span>₦{tax.toLocaleString()}</span>
-              </div>
+              {vatEnabled && (
+                <div className="flex justify-between text-sm text-gray-600">
+                  <span>VAT (5%)</span>
+                  <span>₦{tax.toLocaleString()}</span>
+                </div>
+              )}
               <div className="flex justify-between text-xl font-bold pt-2 border-t">
                 <span>Total</span>
                 <span>₦{total.toLocaleString()}</span>
@@ -239,7 +282,7 @@ function App() {
 
             <select
               value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value as any)}
+              onChange={(e) => setPaymentMethod(e.target.value)}
               className="w-full px-3 py-2 border rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-green-500"
             >
               <option value="cash">Cash</option>
