@@ -1,0 +1,77 @@
+const processSale = async () => {
+  const activeTab = getActiveTab()
+  if (!activeTab || activeTab.cart.length === 0) {
+    toast.error('Cart is empty')
+    return
+  }
+
+  const customer = customers.find(c => c.name === activeTab.customerName) || 
+                   { id: null, name: activeTab.customerName, outstanding_balance: 0 }
+
+  const invoiceNumber = `INV-${Date.now()}`
+  
+  // Create invoice
+  const { error: invoiceError } = await supabase
+    .from('invoices')
+    .insert([{
+      invoice_number: invoiceNumber,
+      customer_name: activeTab.customerName,
+      customer_id: customer.id !== 'walk-in' ? customer.id : null,
+      items: activeTab.cart,
+      subtotal: activeTab.subtotal,
+      tax: activeTab.tax,
+      total: activeTab.total,
+      payment_method: paymentMethod,
+      tab_status: paymentMethod === 'outstanding' ? 'outstanding' : 'paid'
+    }])
+
+  if (invoiceError) {
+    toast.error(invoiceError.message)
+    return
+  }
+
+  // Update stock for each item
+  for (const item of activeTab.cart) {
+    const product = products.find(p => p.name === item.name)
+    if (product) {
+      const newStock = product.stock - item.quantity
+      await supabase
+        .from('products')
+        .update({ stock: newStock })
+        .eq('id', product.id)
+      
+      // Update local state immediately
+      setProducts(current => 
+        current.map(p => 
+          p.id === product.id ? { ...p, stock: newStock } : p
+        )
+      )
+    }
+  }
+
+  if (paymentMethod === 'outstanding' && customer.id) {
+    const newBalance = (customer.outstanding_balance || 0) + activeTab.total
+    await supabase
+      .from('customers')
+      .update({ outstanding_balance: newBalance })
+      .eq('id', customer.id)
+    
+    // Update local customer state
+    setCustomers(current =>
+      current.map(c =>
+        c.id === customer.id ? { ...c, outstanding_balance: newBalance } : c
+      )
+    )
+  }
+
+  toast.success(`Sale complete! Invoice: ${invoiceNumber}`)
+  
+  // Clear cart and keep tab open for next order
+  updateTabCart(activeTab.id, [])
+  setPaymentMethod('cash')
+  
+  // Refresh products from database to ensure sync
+  setTimeout(() => {
+    fetchProducts()
+  }, 500)
+}

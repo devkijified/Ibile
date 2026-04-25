@@ -157,33 +157,50 @@ function POS() {
       return
     }
 
-    // Update stock and customer balance
+    // Update stock for each item
     for (const item of activeTab.cart) {
       const product = products.find(p => p.name === item.name)
       if (product) {
+        const newStock = product.stock - item.quantity
         await supabase
           .from('products')
-          .update({ stock: product.stock - item.quantity })
+          .update({ stock: newStock })
           .eq('id', product.id)
+        
+        // Update local state immediately
+        setProducts(current => 
+          current.map(p => 
+            p.id === product.id ? { ...p, stock: newStock } : p
+          )
+        )
       }
     }
 
     if (paymentMethod === 'outstanding' && customer.id) {
+      const newBalance = (customer.outstanding_balance || 0) + activeTab.total
       await supabase
         .from('customers')
-        .update({ outstanding_balance: (customer.outstanding_balance || 0) + activeTab.total })
+        .update({ outstanding_balance: newBalance })
         .eq('id', customer.id)
+      
+      // Update local customer state
+      setCustomers(current =>
+        current.map(c =>
+          c.id === customer.id ? { ...c, outstanding_balance: newBalance } : c
+        )
+      )
     }
 
-    toast.success(`Sale complete! ${paymentMethod === 'outstanding' ? 'Added to outstanding balance' : ''}`)
+    toast.success(`Sale complete! Invoice: ${invoiceNumber}`)
     
-    // Close tab or create new
-    if (tabs.length > 1) {
-      closeTab(activeTab.id)
-    } else {
-      updateTabCart(activeTab.id, [])
-      setPaymentMethod('cash')
-    }
+    // Clear cart and keep tab open for next order
+    updateTabCart(activeTab.id, [])
+    setPaymentMethod('cash')
+    
+    // Refresh products from database to ensure sync
+    setTimeout(() => {
+      fetchProducts()
+    }, 500)
   }
 
   const activeTab = getActiveTab()
