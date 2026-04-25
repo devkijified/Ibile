@@ -3,371 +3,376 @@ import { supabase } from '../lib/supabase'
 import { Product, CartItem } from '../types'
 import { Toaster, toast } from 'react-hot-toast'
 
+interface Tab {
+  id: string
+  customerId: string
+  customerName: string
+  cart: CartItem[]
+  subtotal: number
+  tax: number
+  total: number
+}
+
 function POS() {
   const [products, setProducts] = useState<Product[]>([])
-  const [cart, setCart] = useState<CartItem[]>([])
-  const [customerName, setCustomerName] = useState('Walk-in Customer')
+  const [tabs, setTabs] = useState<Tab[]>([])
+  const [activeTabId, setActiveTabId] = useState<string | null>(null)
+  const [customers, setCustomers] = useState<any[]>([])
+  const [showCustomerModal, setShowCustomerModal] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState('cash')
-  const [search, setSearch] = useState('')
-  const [category, setCategory] = useState('All')
-  const [loading, setLoading] = useState(true)
   const [vatEnabled, setVatEnabled] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
-  const [showAdminPanel, setShowAdminPanel] = useState(false)
+  const [search, setSearch] = useState('')
+  const [category, setCategory] = useState('All')
 
   useEffect(() => {
     fetchProducts()
-    const adminPass = prompt('Enter admin PIN to enable VAT control (default: 1234)')
-    if (adminPass === '1234') {
-      setIsAdmin(true)
-    }
+    fetchCustomers()
+    
+    // Check if admin
+    const adminPass = prompt('Enter admin PIN (default: 1234)')
+    if (adminPass === '1234') setIsAdmin(true)
+    
+    // Create first tab
+    createNewTab()
   }, [])
 
   async function fetchProducts() {
-    setLoading(true)
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .order('name')
-    
-    if (error) {
-      toast.error('Error fetching products')
-      console.error(error)
-    } else {
-      console.log('Fetched products:', data?.map(p => ({ name: p.name, stock: p.stock })))
-      setProducts(data || [])
-    }
-    setLoading(false)
+    const { data } = await supabase.from('products').select('*').order('name')
+    setProducts(data || [])
   }
 
-  const addToCart = (product: Product) => {
-    if (product.stock <= 0) {
-      toast.error(`${product.name} is out of stock`)
-      return
+  async function fetchCustomers() {
+    const { data } = await supabase.from('customers').select('*').order('name')
+    setCustomers(data || [])
+  }
+
+  const createNewTab = (customer?: any) => {
+    const newTab: Tab = {
+      id: Date.now().toString(),
+      customerId: customer?.id || 'walk-in',
+      customerName: customer?.name || 'Walk-in Customer',
+      cart: [],
+      subtotal: 0,
+      tax: 0,
+      total: 0
     }
-    
-    const existing = cart.find(item => item.name === product.name)
+    setTabs(prev => [...prev, newTab])
+    setActiveTabId(newTab.id)
+  }
+
+  const closeTab = (tabId: string) => {
+    const tab = tabs.find(t => t.id === tabId)
+    if (tab && tab.cart.length > 0) {
+      if (!confirm('This tab has items. Close anyway?')) return
+    }
+    setTabs(prev => prev.filter(t => t.id !== tabId))
+    if (activeTabId === tabId && tabs.length > 1) {
+      setActiveTabId(tabs.find(t => t.id !== tabId)?.id || null)
+    }
+  }
+
+  const getActiveTab = () => tabs.find(t => t.id === activeTabId)
+
+  const addToCart = (product: Product) => {
+    const activeTab = getActiveTab()
+    if (!activeTab) return
+
+    const existing = activeTab.cart.find(item => item.name === product.name)
+    let newCart
     if (existing) {
-      const newQuantity = existing.quantity + 1
-      if (newQuantity > product.stock) {
-        toast.error(`Only ${product.stock} ${product.name} available`)
-        return
-      }
-      setCart(cart.map(item =>
+      newCart = activeTab.cart.map(item =>
         item.name === product.name
-          ? { ...item, quantity: newQuantity, total: newQuantity * item.price }
+          ? { ...item, quantity: item.quantity + 1, total: (item.quantity + 1) * item.price }
           : item
-      ))
+      )
     } else {
-      setCart([...cart, {
+      newCart = [...activeTab.cart, {
         name: product.name,
         quantity: 1,
         price: product.price,
         total: product.price
-      }])
-    }
-    toast.success(`${product.name} added`)
-  }
-
-  const updateQuantity = (name: string, delta: number) => {
-    const product = products.find(p => p.name === name)
-    if (!product) return
-    
-    const currentItem = cart.find(item => item.name === name)
-    const newQuantity = (currentItem?.quantity || 0) + delta
-    
-    if (newQuantity > product.stock) {
-      toast.error(`Only ${product.stock} ${name} available`)
-      return
+      }]
     }
     
-    if (newQuantity <= 0) {
-      setCart(cart.filter(item => item.name !== name))
-    } else {
-      setCart(cart.map(item =>
-        item.name === name
-          ? { ...item, quantity: newQuantity, total: newQuantity * item.price }
-          : item
-      ))
-    }
+    updateTabCart(activeTab.id, newCart)
   }
 
-  const removeItem = (name: string) => {
-    setCart(cart.filter(item => item.name !== name))
-    toast.success('Item removed')
+  const updateQuantity = (itemName: string, delta: number) => {
+    const activeTab = getActiveTab()
+    if (!activeTab) return
+    
+    const newCart = activeTab.cart.map(item => {
+      if (item.name === itemName) {
+        const newQuantity = Math.max(0, item.quantity + delta)
+        return { ...item, quantity: newQuantity, total: newQuantity * item.price }
+      }
+      return item
+    }).filter(item => item.quantity > 0)
+    
+    updateTabCart(activeTab.id, newCart)
   }
 
-  const subtotal = cart.reduce((sum, item) => sum + item.total, 0)
-  const tax = vatEnabled ? subtotal * 0.05 : 0
-  const total = subtotal + tax
+  const updateTabCart = (tabId: string, newCart: CartItem[]) => {
+    const subtotal = newCart.reduce((sum, item) => sum + item.total, 0)
+    const tax = vatEnabled ? subtotal * 0.05 : 0
+    const total = subtotal + tax
+    
+    setTabs(prev => prev.map(tab =>
+      tab.id === tabId
+        ? { ...tab, cart: newCart, subtotal, tax, total }
+        : tab
+    ))
+  }
 
   const processSale = async () => {
-    if (cart.length === 0) {
+    const activeTab = getActiveTab()
+    if (!activeTab || activeTab.cart.length === 0) {
       toast.error('Cart is empty')
       return
     }
 
-    console.log('Starting sale process...')
-    console.log('Cart items:', cart)
+    const customer = customers.find(c => c.name === activeTab.customerName) || 
+                     { id: null, name: activeTab.customerName, outstanding_balance: 0 }
 
     const invoiceNumber = `INV-${Date.now()}`
     
     // Create invoice
-    const { data: invoiceData, error: invoiceError } = await supabase
+    const { error: invoiceError } = await supabase
       .from('invoices')
       .insert([{
         invoice_number: invoiceNumber,
-        customer_name: customerName,
-        items: cart,
-        subtotal: subtotal,
-        tax: tax,
-        discount: 0,
-        total: total,
+        customer_name: activeTab.customerName,
+        customer_id: customer.id !== 'walk-in' ? customer.id : null,
+        items: activeTab.cart,
+        subtotal: activeTab.subtotal,
+        tax: activeTab.tax,
+        total: activeTab.total,
         payment_method: paymentMethod,
-        status: 'completed'
+        tab_status: paymentMethod === 'outstanding' ? 'outstanding' : 'paid'
       }])
-      .select()
 
     if (invoiceError) {
-      console.error('Invoice error:', invoiceError)
-      toast.error(`Error: ${invoiceError.message}`)
+      toast.error(invoiceError.message)
       return
     }
 
-    console.log('Invoice created:', invoiceData)
-
-    // Update stock for each item
-    let stockErrors = 0
-    
-    for (const item of cart) {
-      console.log(`Processing stock for: ${item.name}, quantity: ${item.quantity}`)
-      
+    // Update stock and customer balance
+    for (const item of activeTab.cart) {
       const product = products.find(p => p.name === item.name)
-      console.log(`Found product:`, product)
-      
       if (product) {
-        const newStock = product.stock - item.quantity
-        console.log(`Current stock: ${product.stock}, New stock: ${newStock}`)
-        
-        const { data: updateData, error: stockError } = await supabase
+        await supabase
           .from('products')
-          .update({ stock: newStock })
+          .update({ stock: product.stock - item.quantity })
           .eq('id', product.id)
-          .select()
-        
-        if (stockError) {
-          console.error(`Stock error for ${item.name}:`, stockError)
-          stockErrors++
-          toast.error(`Failed to update stock for ${item.name}`)
-        } else {
-          console.log(`Stock updated for ${item.name}:`, updateData)
-          toast.success(`Stock updated: ${item.name} now ${newStock}`)
-        }
-      } else {
-        console.error(`Product not found: ${item.name}`)
-        stockErrors++
       }
     }
+
+    if (paymentMethod === 'outstanding' && customer.id) {
+      await supabase
+        .from('customers')
+        .update({ outstanding_balance: (customer.outstanding_balance || 0) + activeTab.total })
+        .eq('id', customer.id)
+    }
+
+    toast.success(`Sale complete! ${paymentMethod === 'outstanding' ? 'Added to outstanding balance' : ''}`)
     
-    if (stockErrors === 0) {
-      toast.success(`Sale complete! Invoice: ${invoiceNumber}`)
-      setCart([])
-      await fetchProducts() // Refresh products to show updated stock
+    // Close tab or create new
+    if (tabs.length > 1) {
+      closeTab(activeTab.id)
     } else {
-      toast.error(`Sale completed but ${stockErrors} stock updates failed`)
+      updateTabCart(activeTab.id, [])
+      setPaymentMethod('cash')
     }
   }
 
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = search === '' || product.name.toLowerCase().includes(search.toLowerCase())
-    const matchesCategory = category === 'All' || product.category === category
+  const activeTab = getActiveTab()
+  const categories = ['All', ...new Set(products.map(p => p.category))]
+  const filteredProducts = products.filter(p => {
+    const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase())
+    const matchesCategory = category === 'All' || p.category === category
     return matchesSearch && matchesCategory
   })
 
-  const categories = ['All', ...new Set(products.map(p => p.category))]
-
   return (
     <div className="min-h-screen bg-gray-100">
-      <Toaster position="top-right" />
+      <Toaster />
       
-      <div className="flex flex-col lg:flex-row">
-        <div className="flex-1 p-6">
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h1 className="text-3xl font-bold mb-2">Ibile Bar & Grill</h1>
-              <p className="text-gray-600">Point of Sale System</p>
-            </div>
-            {isAdmin && (
-              <button
-                onClick={() => setShowAdminPanel(!showAdminPanel)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                {showAdminPanel ? 'Hide Admin' : 'Admin Panel'}
-              </button>
-            )}
-          </div>
-          
-          {showAdminPanel && isAdmin && (
-            <div className="bg-white p-4 rounded-lg shadow mb-6 border-l-4 border-blue-600">
-              <h3 className="font-bold mb-3">Admin Controls</h3>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={vatEnabled}
-                  onChange={(e) => setVatEnabled(e.target.checked)}
-                  className="w-5 h-5"
-                />
-                <span>Enable VAT (5%) on all sales</span>
-              </label>
-              <p className="text-sm text-gray-500 mt-2">
-                Current status: {vatEnabled ? 'VAT included' : 'No VAT applied'}
-              </p>
-            </div>
-          )}
-          
-          <div className="flex gap-4 mb-6">
-            <input
-              type="text"
-              placeholder="Search products..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-            />
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+      {/* Tabs Bar */}
+      <div className="bg-white border-b flex overflow-x-auto">
+        {tabs.map(tab => (
+          <div key={tab.id} className="flex items-center border-r">
+            <button
+              onClick={() => setActiveTabId(tab.id)}
+              className={`px-4 py-3 text-sm font-medium flex items-center gap-2 ${
+                activeTabId === tab.id ? 'bg-green-50 text-green-600 border-b-2 border-green-600' : ''
+              }`}
             >
-              {categories.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
+              {tab.customerName}
+              {tab.cart.length > 0 && <span className="bg-gray-200 px-1 rounded text-xs">{tab.cart.length}</span>}
+            </button>
+            <button
+              onClick={() => closeTab(tab.id)}
+              className="px-2 text-gray-400 hover:text-red-500"
+            >
+              ×
+            </button>
           </div>
+        ))}
+        <button
+          onClick={() => setShowCustomerModal(true)}
+          className="px-4 py-3 text-green-600 hover:bg-green-50"
+        >
+          + New Tab
+        </button>
+      </div>
 
-          {loading ? (
-            <div className="text-center py-20 text-gray-500">Loading products...</div>
-          ) : (
+      {activeTab ? (
+        <div className="flex flex-col lg:flex-row">
+          {/* Products Section */}
+          <div className="flex-1 p-6">
+            <div className="flex gap-4 mb-6">
+              <input
+                type="text"
+                placeholder="Search..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="flex-1 px-4 py-2 border rounded-lg"
+              />
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="px-4 py-2 border rounded-lg"
+              >
+                {categories.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {filteredProducts.map(product => (
                 <button
                   key={product.id}
                   onClick={() => addToCart(product)}
-                  className={`bg-white p-4 rounded-lg shadow hover:shadow-md transition text-left w-full ${product.stock <= 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  disabled={product.stock <= 0}
+                  className="bg-white p-4 rounded-lg shadow hover:shadow-md text-left"
                 >
-                  <h3 className="font-semibold text-lg">{product.name}</h3>
-                  <p className="text-green-600 font-bold text-xl mt-2">₦{product.price.toLocaleString()}</p>
-                  <p className={`text-sm mt-1 ${product.stock <= 5 ? 'text-red-500 font-semibold' : 'text-gray-500'}`}>
-                    Stock: {product.stock}
-                  </p>
+                  <h3 className="font-semibold">{product.name}</h3>
+                  <p className="text-green-600 font-bold">₦{product.price.toLocaleString()}</p>
+                  <p className="text-sm text-gray-500">Stock: {product.stock}</p>
                 </button>
               ))}
-              {filteredProducts.length === 0 && (
-                <div className="col-span-full text-center py-20 text-gray-500">
-                  No products found
-                </div>
-              )}
             </div>
-          )}
-        </div>
-
-        <div className="lg:w-96 bg-white shadow-lg flex flex-col h-screen sticky top-0">
-          <div className="p-6 border-b">
-            <h2 className="text-2xl font-bold">Current Order</h2>
           </div>
 
-          <div className="p-6 border-b">
-            <label className="block text-sm font-medium mb-1">Customer Name</label>
-            <input
-              type="text"
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-            />
-          </div>
+          {/* Cart Section */}
+          <div className="lg:w-96 bg-white shadow-lg flex flex-col h-screen sticky top-0">
+            <div className="p-4 border-b">
+              <div className="flex justify-between items-center">
+                <h2 className="font-bold">{activeTab.customerName}</h2>
+                <button
+                  onClick={() => setShowCustomerModal(true)}
+                  className="text-sm text-blue-600"
+                >
+                  Change
+                </button>
+              </div>
+            </div>
 
-          <div className="flex-1 overflow-y-auto p-6">
-            {cart.length === 0 ? (
-              <div className="text-center text-gray-500 py-10">Cart is empty</div>
-            ) : (
-              cart.map(item => {
-                const product = products.find(p => p.name === item.name)
-                return (
-                  <div key={item.name} className="flex justify-between items-center mb-4 p-3 border rounded-lg">
-                    <div className="flex-1">
-                      <p className="font-semibold">{item.name}</p>
-                      <p className="text-sm text-gray-600">₦{item.price.toLocaleString()} each</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => updateQuantity(item.name, -1)}
-                        className="w-8 h-8 bg-gray-200 rounded-lg hover:bg-gray-300 flex items-center justify-center"
-                      >
-                        -
-                      </button>
-                      <span className="w-8 text-center">{item.quantity}</span>
-                      <button
-                        onClick={() => updateQuantity(item.name, 1)}
-                        className="w-8 h-8 bg-gray-200 rounded-lg hover:bg-gray-300 flex items-center justify-center"
-                        disabled={product && item.quantity >= product.stock}
-                      >
-                        +
-                      </button>
-                      <button
-                        onClick={() => removeItem(item.name)}
-                        className="w-8 h-8 text-red-500 hover:text-red-700 flex items-center justify-center text-xl"
-                      >
-                        ×
-                      </button>
-                    </div>
-                    <div className="ml-4 font-semibold min-w-[80px] text-right">
-                      ₦{item.total.toLocaleString()}
-                    </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              {activeTab.cart.map(item => (
+                <div key={item.name} className="flex justify-between items-center mb-3 p-2 border rounded">
+                  <div className="flex-1">
+                    <p className="font-semibold">{item.name}</p>
+                    <p className="text-sm">₦{item.price.toLocaleString()}</p>
                   </div>
-                )
-              })
-            )}
-          </div>
-
-          <div className="p-6 border-t">
-            <div className="space-y-2 mb-4">
-              <div className="flex justify-between">
-                <span>Subtotal</span>
-                <span>₦{subtotal.toLocaleString()}</span>
-              </div>
-              {vatEnabled && (
-                <div className="flex justify-between text-sm text-gray-600">
-                  <span>VAT (5%)</span>
-                  <span>₦{tax.toLocaleString()}</span>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => updateQuantity(item.name, -1)} className="w-7 h-7 bg-gray-200 rounded">-</button>
+                    <span>{item.quantity}</span>
+                    <button onClick={() => updateQuantity(item.name, 1)} className="w-7 h-7 bg-gray-200 rounded">+</button>
+                  </div>
+                  <div className="ml-3 font-semibold w-20 text-right">₦{item.total.toLocaleString()}</div>
                 </div>
-              )}
-              <div className="flex justify-between text-xl font-bold pt-2 border-t">
-                <span>Total</span>
-                <span>₦{total.toLocaleString()}</span>
-              </div>
+              ))}
             </div>
 
-            <select
-              value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-green-500"
-            >
-              <option value="cash">Cash</option>
-              <option value="card">Card</option>
-              <option value="transfer">Bank Transfer</option>
-              <option value="pos">POS</option>
-            </select>
+            <div className="p-4 border-t">
+              <div className="space-y-2 mb-4">
+                <div className="flex justify-between">
+                  <span>Subtotal</span>
+                  <span>₦{activeTab.subtotal.toLocaleString()}</span>
+                </div>
+                {vatEnabled && (
+                  <div className="flex justify-between text-sm text-gray-600">
+                    <span>VAT 5%</span>
+                    <span>₦{activeTab.tax.toLocaleString()}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-bold text-lg pt-2 border-t">
+                  <span>Total</span>
+                  <span>₦{activeTab.total.toLocaleString()}</span>
+                </div>
+              </div>
 
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                className="w-full p-2 border rounded-lg mb-3"
+              >
+                <option value="cash">Cash</option>
+                <option value="card">Card</option>
+                <option value="transfer">Transfer</option>
+                <option value="outstanding">Outstanding (Credit)</option>
+              </select>
+
+              <button
+                onClick={processSale}
+                disabled={activeTab.cart.length === 0}
+                className="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50"
+              >
+                Complete Sale
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="text-center py-20">No active tabs. Click + New Tab to start.</div>
+      )}
+
+      {/* Customer Selection Modal */}
+      {showCustomerModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-96 max-h-96 overflow-y-auto">
+            <h2 className="text-xl font-bold mb-4">Select Customer</h2>
             <button
-              onClick={processSale}
-              className="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={cart.length === 0}
+              onClick={() => {
+                createNewTab()
+                setShowCustomerModal(false)
+              }}
+              className="w-full text-left p-3 hover:bg-gray-100 rounded border mb-2"
             >
-              Complete Sale
+              Walk-in Customer
+            </button>
+            {customers.map(c => (
+              <button
+                key={c.id}
+                onClick={() => {
+                  createNewTab(c)
+                  setShowCustomerModal(false)
+                }}
+                className="w-full text-left p-3 hover:bg-gray-100 rounded border mb-2"
+              >
+                <div className="font-semibold">{c.name}</div>
+                <div className="text-sm text-gray-500">Outstanding: ₦{c.outstanding_balance?.toLocaleString() || 0}</div>
+              </button>
+            ))}
+            <button
+              onClick={() => setShowCustomerModal(false)}
+              className="w-full mt-3 p-2 bg-gray-200 rounded"
+            >
+              Cancel
             </button>
           </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
