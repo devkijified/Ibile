@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { Toaster, toast } from 'react-hot-toast'
+import { toast, Toaster } from 'react-hot-toast'
 
 interface Customer {
   id: string
@@ -16,7 +16,6 @@ function Customers() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -41,12 +40,17 @@ function Customers() {
   }
 
   async function createCustomer() {
+    if (!formData.name) {
+      toast.error('Name is required')
+      return
+    }
+
     const { error } = await supabase
       .from('customers')
       .insert([{
         name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
+        email: formData.email || null,
+        phone: formData.phone || null,
         loyalty_points: 0,
         total_spent: 0,
         outstanding_balance: 0
@@ -64,95 +68,96 @@ function Customers() {
 
   const filteredCustomers = customers.filter(c => 
     c.name.toLowerCase().includes(search.toLowerCase()) ||
-    c.phone.includes(search)
+    (c.phone && c.phone.includes(search))
   )
 
   return (
-    <div className="p-6">
-      <Toaster />
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Customers</h1>
-        <button
-          onClick={() => setShowModal(true)}
-          className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
-        >
+    <div className="customers-container">
+      <Toaster position="top-right" />
+      <div className="customers-header">
+        <h1 className="customers-title">Customers</h1>
+        <button onClick={() => setShowModal(true)} className="new-customer-btn">
           + New Customer
         </button>
       </div>
 
-      <div className="mb-4">
+      <div style={{ marginBottom: '1rem' }}>
         <input
           type="text"
           placeholder="Search by name or phone..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full px-4 py-2 border rounded-lg"
+          className="search-input"
         />
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-gray-50">
+      <div style={{ overflowX: 'auto' }}>
+        <table className="customers-table">
+          <thead>
             <tr>
-              <th className="px-6 py-3 text-left text-sm font-medium text-gray-500">Name</th>
-              <th className="px-6 py-3 text-left text-sm font-medium text-gray-500">Phone</th>
-              <th className="px-6 py-3 text-right text-sm font-medium text-gray-500">Loyalty Points</th>
-              <th className="px-6 py-3 text-right text-sm font-medium text-gray-500">Outstanding</th>
-              <th className="px-6 py-3 text-right text-sm font-medium text-gray-500">Total Spent</th>
+              <th>Name</th>
+              <th>Phone</th>
+              <th className="text-right">Loyalty Points</th>
+              <th className="text-right">Outstanding</th>
+              <th className="text-right">Total Spent</th>
             </tr>
           </thead>
-          <tbody className="divide-y">
+          <tbody>
             {filteredCustomers.map(customer => (
-              <tr key={customer.id} className="hover:bg-gray-50 cursor-pointer">
-                <td className="px-6 py-4">{customer.name}</td>
-                <td className="px-6 py-4">{customer.phone}</td>
-                <td className="px-6 py-4 text-right font-semibold">{customer.loyalty_points}</td>
-                <td className="px-6 py-4 text-right text-red-600 font-semibold">
-                  ₦{customer.outstanding_balance?.toLocaleString() || 0}
+              <tr key={customer.id}>
+                <td>{customer.name}</td>
+                <td>{customer.phone || '-'}</td>
+                <td className="text-right">{customer.loyalty_points}</td>
+                <td className="text-right text-red">
+                  ₦{(customer.outstanding_balance || 0).toLocaleString()}
                 </td>
-                <td className="px-6 py-4 text-right">₦{customer.total_spent?.toLocaleString() || 0}</td>
+                <td className="text-right">₦{(customer.total_spent || 0).toLocaleString()}</td>
               </tr>
             ))}
+            {filteredCustomers.length === 0 && (
+              <tr>
+                <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
+                  No customers found
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white rounded-lg p-6 w-96">
-            <h2 className="text-xl font-bold mb-4">New Customer</h2>
+        <div className="modal-overlay">
+          <div className="modal">
+            <h2 className="modal-title">New Customer</h2>
             <input
               type="text"
-              placeholder="Name"
+              placeholder="Name *"
               value={formData.name}
               onChange={(e) => setFormData({...formData, name: e.target.value})}
-              className="w-full px-3 py-2 border rounded-lg mb-3"
+              className="cart-input"
+              style={{ marginBottom: '0.75rem' }}
             />
             <input
               type="email"
-              placeholder="Email"
+              placeholder="Email (optional)"
               value={formData.email}
               onChange={(e) => setFormData({...formData, email: e.target.value})}
-              className="w-full px-3 py-2 border rounded-lg mb-3"
+              className="cart-input"
+              style={{ marginBottom: '0.75rem' }}
             />
             <input
               type="tel"
-              placeholder="Phone"
+              placeholder="Phone (optional)"
               value={formData.phone}
               onChange={(e) => setFormData({...formData, phone: e.target.value})}
-              className="w-full px-3 py-2 border rounded-lg mb-4"
+              className="cart-input"
+              style={{ marginBottom: '1rem' }}
             />
-            <div className="flex gap-2">
-              <button
-                onClick={createCustomer}
-                className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700"
-              >
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button onClick={createCustomer} className="new-customer-btn" style={{ flex: 1 }}>
                 Create
               </button>
-              <button
-                onClick={() => setShowModal(false)}
-                className="flex-1 bg-gray-300 py-2 rounded-lg hover:bg-gray-400"
-              >
+              <button onClick={() => setShowModal(false)} className="modal-cancel" style={{ flex: 1 }}>
                 Cancel
               </button>
             </div>
