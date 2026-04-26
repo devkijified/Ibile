@@ -1,64 +1,43 @@
-import { useState, useEffect } from 'react'
-import { supabase } from './lib/supabase'
-import Login from './pages/Login'
-import POS from './pages/POS'
-import Customers from './pages/Customers'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { supabase } from './lib/supabase';
+import Login from './pages/Login';
+import POSTerminal from './pages/POSTerminal';
+import AdminLayout from './components/AdminLayout';
+import AdminDashboard from './pages/admin/Dashboard';
+import ProductsManagement from './pages/admin/Products';
 
 function App() {
-  const [session, setSession] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-  const [currentView, setCurrentView] = useState<'pos' | 'customers'>('pos')
-  const [isAdmin, setIsAdmin] = useState(false)
+  const [session, setSession] = useState(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setLoading(false)
-    })
+      setSession(session);
+    });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
-    })
+      setSession(session);
+    });
 
-    return () => subscription.unsubscribe()
-  }, [])
-
-  if (loading) {
-    return <div className="min-h-screen bg-gray-100 flex items-center justify-center">Loading...</div>
-  }
+    return () => subscription.unsubscribe();
+  }, []);
 
   if (!session) {
-    return <Login onLogin={() => {}} />
+    return <Login />;
   }
 
   return (
-    <div>
-      <nav className="bg-white shadow-sm border-b">
-        <div className="flex gap-4 px-6 py-3">
-          <button
-            onClick={() => setCurrentView('pos')}
-            className={`px-4 py-2 rounded ${currentView === 'pos' ? 'bg-green-600 text-white' : 'text-gray-600'}`}
-          >
-            POS
-          </button>
-          <button
-            onClick={() => setCurrentView('customers')}
-            className={`px-4 py-2 rounded ${currentView === 'customers' ? 'bg-green-600 text-white' : 'text-gray-600'}`}
-          >
-            Customers
-          </button>
-          <button
-            onClick={() => supabase.auth.signOut()}
-            className="ml-auto px-4 py-2 text-red-600"
-          >
-            Sign Out
-          </button>
-        </div>
-      </nav>
-
-      {currentView === 'pos' ? <POS /> : <Customers />}
-    </div>
-  )
+    <Router>
+      <Routes>
+        <Route path="/pos" element={<POSTerminal />} />
+        <Route path="/admin" element={<AdminLayout />}>
+          <Route path="dashboard" element={<AdminDashboard />} />
+          <Route path="products" element={<ProductsManagement />} />
+        </Route>
+        <Route path="/" element={<Navigate to="/pos" />} />
+      </Routes>
+    </Router>
+  );
 }
 
-export default App
+export default App;
