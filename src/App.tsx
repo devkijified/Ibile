@@ -9,18 +9,37 @@ import ProductsManagement from './pages/admin/Products';
 
 function App() {
   const [session, setSession] = useState(null);
+  const [userRole, setUserRole] = useState(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
+      if (session) {
+        fetchUserRole(session.user.id);
+      }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      if (session) {
+        fetchUserRole(session.user.id);
+      } else {
+        setUserRole(null);
+      }
     });
 
     return () => subscription.unsubscribe();
   }, []);
+
+  const fetchUserRole = async (userId) => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', userId)
+      .single();
+    
+    setUserRole(data?.role);
+  };
 
   if (!session) {
     return <Login />;
@@ -30,7 +49,9 @@ function App() {
     <Router>
       <Routes>
         <Route path="/pos" element={<POSTerminal />} />
-        <Route path="/admin" element={<AdminLayout />}>
+        <Route path="/admin/*" element={
+          userRole === 'super_admin' ? <AdminLayout /> : <Navigate to="/pos" />
+        }>
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="products" element={<ProductsManagement />} />
         </Route>
