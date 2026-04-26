@@ -33,7 +33,7 @@ function App() {
 
   const fetchUserRole = async (userId) => {
     const { data } = await supabase
-      .from('profiles')
+      .from('staff_roles')
       .select('role')
       .eq('id', userId)
       .single();
@@ -49,7 +49,7 @@ function App() {
     <Router>
       <Routes>
         <Route path="/pos" element={<POSTerminal />} />
-        <Route path="/admin/*" element={
+        <Route path="/admin" element={
           userRole === 'super_admin' ? <AdminLayout /> : <Navigate to="/pos" />
         }>
           <Route path="dashboard" element={<AdminDashboard />} />
