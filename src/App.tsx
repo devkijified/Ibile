@@ -3,12 +3,12 @@ import { supabase } from './lib/supabase'
 import Login from './pages/Login'
 import POS from './pages/POS'
 import Customers from './pages/Customers'
+import { Toaster } from 'react-hot-toast'
 
 function App() {
   const [session, setSession] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [currentView, setCurrentView] = useState<'pos' | 'customers'>('pos')
-  const [isAdmin, setIsAdmin] = useState(false)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -24,7 +24,7 @@ function App() {
   }, [])
 
   if (loading) {
-    return <div className="min-h-screen bg-gray-100 flex items-center justify-center">Loading...</div>
+    return <div className="login-container">Loading...</div>
   }
 
   if (!session) {
@@ -33,28 +33,26 @@ function App() {
 
   return (
     <div>
-      <nav className="bg-white shadow-sm border-b">
-        <div className="flex gap-4 px-6 py-3">
+      <Toaster position="top-right" />
+      <div className="header">
+        <div className="nav-buttons">
           <button
             onClick={() => setCurrentView('pos')}
-            className={`px-4 py-2 rounded ${currentView === 'pos' ? 'bg-green-600 text-white' : 'text-gray-600'}`}
+            className={`nav-btn ${currentView === 'pos' ? 'nav-btn-active' : 'nav-btn-inactive'}`}
           >
             POS
           </button>
           <button
             onClick={() => setCurrentView('customers')}
-            className={`px-4 py-2 rounded ${currentView === 'customers' ? 'bg-green-600 text-white' : 'text-gray-600'}`}
+            className={`nav-btn ${currentView === 'customers' ? 'nav-btn-active' : 'nav-btn-inactive'}`}
           >
             Customers
           </button>
-          <button
-            onClick={() => supabase.auth.signOut()}
-            className="ml-auto px-4 py-2 text-red-600"
-          >
-            Sign Out
-          </button>
         </div>
-      </nav>
+        <button onClick={() => supabase.auth.signOut()} className="logout-btn">
+          Sign Out
+        </button>
+      </div>
 
       {currentView === 'pos' ? <POS /> : <Customers />}
     </div>
