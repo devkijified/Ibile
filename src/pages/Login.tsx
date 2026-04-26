@@ -1,60 +1,82 @@
-import { useState } from 'react'
-import { supabase } from '../lib/supabase'
-import { toast, Toaster } from 'react-hot-toast'
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
+import toast from 'react-hot-toast';
 
-function Login({ onLogin }: { onLogin: () => void }) {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [loading, setLoading] = useState(false)
+export default function Login() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-    
-    if (error) {
-      toast.error(error.message)
-    } else {
-      toast.success('Logged in successfully')
-      onLogin()
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+
+      if (data.user) {
+        // Check user role from staff_roles table
+        const { data: roleData, error: roleError } = await supabase
+          .from('staff_roles')
+          .select('role')
+          .eq('id', data.user.id)
+          .single();
+
+        if (roleError) {
+          console.error('Error fetching role:', roleError);
+        }
+
+        // Redirect based on role
+        if (roleData?.role === 'super_admin') {
+          toast.success('Welcome Admin!');
+          navigate('/admin/dashboard');
+        } else {
+          toast.success('Login successful!');
+          navigate('/pos');
+        }
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Login failed');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false)
-  }
+  };
 
   return (
     <div className="login-container">
-      <Toaster position="top-right" />
       <div className="login-box">
-        <h1 className="login-title">Ibile Bar & Grill</h1>
-        <form onSubmit={handleSubmit} className="login-form">
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="login-input"
-            required
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="login-input"
-            required
-          />
-          <button type="submit" disabled={loading} className="login-btn">
-            {loading ? 'Loading...' : 'Sign In'}
+        <h1>Ibile POS System</h1>
+        <form onSubmit={handleLogin}>
+          <div className="form-group">
+            <label>Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label>Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+          <button type="submit" disabled={loading}>
+            {loading ? 'Logging in...' : 'Login'}
           </button>
         </form>
-        <p className="login-subtitle">Contact administrator for account access</p>
       </div>
     </div>
-  )
+  );
 }
-
-export default Login
