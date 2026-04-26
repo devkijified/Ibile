@@ -21,16 +21,16 @@ export default function AdminLayout() {
         return;
       }
 
-      // Check user's role from profiles table
-      const { data: profile, error } = await supabase
-        .from('profiles')
+      // Check user's role from staff_roles table
+      const { data: roleData, error } = await supabase
+        .from('staff_roles')
         .select('role')
         .eq('id', user.id)
         .single();
 
-      if (error || profile?.role !== 'super_admin') {
+      if (error || roleData?.role !== 'super_admin') {
         toast.error('Access denied. Admin only area.');
-        navigate('/pos'); // Redirect to POS if not admin
+        navigate('/pos');
         return;
       }
 
@@ -54,7 +54,7 @@ export default function AdminLayout() {
   }
 
   if (!isAdmin) {
-    return null; // Will redirect in useEffect
+    return null;
   }
 
   return (
