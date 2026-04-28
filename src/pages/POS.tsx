@@ -28,9 +28,15 @@ function POS({ userRole = 'cashier' }: POSProps) {
   const [category, setCategory] = useState('All')
   const [vatEnabled, setVatEnabled] = useState(true)
   const [showAdminPanel, setShowAdminPanel] = useState(false)
+  
+  // User info state
+  const [userName, setUserName] = useState<string>('')
+  const [currentTime, setCurrentTime] = useState<string>('')
+  const [currentDate, setCurrentDate] = useState<string>('')
 
   const isAdmin = userRole === 'super_admin' || userRole === 'admin'
 
+  // Fetch products and customers
   useEffect(() => {
     fetchProducts()
     fetchCustomers()
@@ -45,6 +51,41 @@ function POS({ userRole = 'cashier' }: POSProps) {
     createNewTab()
 
     return () => { stockChannel.unsubscribe() }
+  }, [])
+
+  // Get user info and set time/date
+  useEffect(() => {
+    // Get current user info
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user?.email) {
+        // Extract name from email (before @)
+        const nameFromEmail = user.email.split('@')[0]
+        // Capitalize first letter
+        const formattedName = nameFromEmail.charAt(0).toUpperCase() + nameFromEmail.slice(1)
+        setUserName(formattedName)
+      }
+    })
+
+    // Update time every second
+    const updateDateTime = () => {
+      const now = new Date()
+      setCurrentDate(now.toLocaleDateString('en-NG', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      }))
+      setCurrentTime(now.toLocaleTimeString('en-NG', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      }))
+    }
+    
+    updateDateTime()
+    const interval = setInterval(updateDateTime, 1000)
+    
+    return () => clearInterval(interval)
   }, [])
 
   async function fetchProducts() {
@@ -201,8 +242,38 @@ function POS({ userRole = 'cashier' }: POSProps) {
     <div className="pos-layout">
       <Toaster position="top-right" />
       
+      {/* Welcome Header with User Name, Date and Time */}
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 50,
+        background: 'linear-gradient(135deg, #1e3c2c 0%, #2d5a3f 100%)',
+        color: 'white',
+        padding: '0.75rem 1.5rem',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
+      }}>
+        <div>
+          <h2 style={{ fontSize: '0.875rem', fontWeight: 'normal', opacity: 0.9, marginBottom: '0.25rem' }}>Welcome back,</h2>
+          <h1 style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{userName || 'Staff Member'}</h1>
+          <div style={{ fontSize: '0.75rem', opacity: 0.8, marginTop: '0.25rem' }}>
+            {userRole === 'super_admin' && '👑 Super Admin'}
+            {userRole === 'admin' && '⚙️ Admin'}
+            {userRole === 'cashier' && '🪑 Cashier'}
+          </div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: '0.875rem', opacity: 0.9 }}>{currentDate}</div>
+          <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{currentTime}</div>
+        </div>
+      </div>
+      
       {/* Tabs Bar */}
-      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 40, background: 'white', borderBottom: '1px solid #e5e7eb', marginTop: '57px' }}>
+      <div style={{ position: 'fixed', top: '75px', left: 0, right: 0, zIndex: 40, background: 'white', borderBottom: '1px solid #e5e7eb' }}>
         <div style={{ display: 'flex', overflowX: 'auto', padding: '0 1rem' }}>
           {tabs.map(tab => (
             <div key={tab.id} style={{ display: 'flex', alignItems: 'center', borderRight: '1px solid #e5e7eb' }}>
@@ -241,7 +312,7 @@ function POS({ userRole = 'cashier' }: POSProps) {
 
       {/* Admin Panel Button - Only for admins */}
       {isAdmin && (
-        <div style={{ position: 'fixed', top: '57px', right: '1rem', zIndex: 45 }}>
+        <div style={{ position: 'fixed', top: '75px', right: '1rem', zIndex: 45 }}>
           <button
             onClick={() => setShowAdminPanel(!showAdminPanel)}
             style={{
@@ -261,7 +332,7 @@ function POS({ userRole = 'cashier' }: POSProps) {
       {showAdminPanel && isAdmin && (
         <div style={{
           position: 'fixed',
-          top: '90px',
+          top: '105px',
           right: '1rem',
           zIndex: 45,
           background: 'white',
@@ -289,7 +360,7 @@ function POS({ userRole = 'cashier' }: POSProps) {
       {activeTab ? (
         <>
           {/* Products Section */}
-          <div className="products-section" style={{ marginTop: '110px' }}>
+          <div className="products-section" style={{ marginTop: '130px' }}>
             <div className="search-bar">
               <input
                 type="text"
@@ -401,7 +472,7 @@ function POS({ userRole = 'cashier' }: POSProps) {
           </div>
         </>
       ) : (
-        <div style={{ textAlign: 'center', padding: '2rem', marginTop: '110px' }}>
+        <div style={{ textAlign: 'center', padding: '2rem', marginTop: '130px' }}>
           No active tabs. Click + New Tab to start.
         </div>
       )}
