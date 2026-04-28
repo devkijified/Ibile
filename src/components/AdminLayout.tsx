@@ -21,7 +21,6 @@ export default function AdminLayout() {
         return;
       }
 
-      // Check user's role from staff_roles table
       const { data: roleData, error } = await supabase
         .from('staff_roles')
         .select('role')
