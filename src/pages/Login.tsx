@@ -14,34 +14,15 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (error) throw error;
 
-      if (data.user) {
-        // Check user role from staff_roles table
-        const { data: roleData, error: roleError } = await supabase
-          .from('staff_roles')
-          .select('role')
-          .eq('id', data.user.id)
-          .single();
-
-        if (roleError) {
-          console.error('Error fetching role:', roleError);
-        }
-
-        // Redirect based on role
-        if (roleData?.role === 'super_admin') {
-          toast.success('Welcome Admin!');
-          navigate('/admin/dashboard');
-        } else {
-          toast.success('Login successful!');
-          navigate('/pos');
-        }
-      }
+      toast.success('Login successful!');
+      navigate('/pos');
     } catch (error: any) {
       toast.error(error.message || 'Login failed');
     } finally {
@@ -50,29 +31,69 @@ export default function Login() {
   };
 
   return (
-    <div className="login-container">
-      <div className="login-box">
-        <h1>Ibile POS System</h1>
+    <div style={{
+      minHeight: '100vh',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+    }}>
+      <div style={{
+        background: 'white',
+        padding: '40px',
+        borderRadius: '12px',
+        boxShadow: '0 10px 40px rgba(0,0,0,0.1)',
+        width: '100%',
+        maxWidth: '400px'
+      }}>
+        <h1 style={{ textAlign: 'center', marginBottom: '30px' }}>Ibile POS</h1>
         <form onSubmit={handleLogin}>
-          <div className="form-group">
-            <label>Email</label>
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '12px',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                fontSize: '16px'
+              }}
               required
             />
           </div>
-          <div className="form-group">
-            <label>Password</label>
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>Password</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '12px',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                fontSize: '16px'
+              }}
               required
             />
           </div>
-          <button type="submit" disabled={loading}>
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              width: '100%',
+              padding: '12px',
+              background: '#3b82f6',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '16px',
+              cursor: 'pointer'
+            }}
+          >
             {loading ? 'Logging in...' : 'Login'}
           </button>
         </form>
