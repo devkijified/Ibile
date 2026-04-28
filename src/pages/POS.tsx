@@ -26,7 +26,7 @@ function POS({ userRole = 'cashier' }: POSProps) {
   const [paymentMethod, setPaymentMethod] = useState('cash')
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('All')
-  const [vatEnabled, setVatEnabled] = useState(true)
+  const [vatEnabled, setVatEnabled] = useState(false) // Default: UNCHECKED
   const [showAdminPanel, setShowAdminPanel] = useState(false)
   
   // User info state
@@ -55,18 +55,14 @@ function POS({ userRole = 'cashier' }: POSProps) {
 
   // Get user info and set time/date
   useEffect(() => {
-    // Get current user info
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user?.email) {
-        // Extract name from email (before @)
         const nameFromEmail = user.email.split('@')[0]
-        // Capitalize first letter
         const formattedName = nameFromEmail.charAt(0).toUpperCase() + nameFromEmail.slice(1)
         setUserName(formattedName)
       }
     })
 
-    // Update time every second
     const updateDateTime = () => {
       const now = new Date()
       setCurrentDate(now.toLocaleDateString('en-NG', {
@@ -184,6 +180,18 @@ function POS({ userRole = 'cashier' }: POSProps) {
     ))
   }
 
+  // Recalculate tax when vatEnabled changes
+  useEffect(() => {
+    tabs.forEach(tab => {
+      const subtotal = tab.cart.reduce((sum, item) => sum + item.total, 0)
+      const tax = vatEnabled ? subtotal * 0.05 : 0
+      const total = subtotal + tax
+      setTabs(prev => prev.map(t =>
+        t.id === tab.id ? { ...t, subtotal, tax, total } : t
+      ))
+    })
+  }, [vatEnabled])
+
   const processSale = async () => {
     const activeTab = getActiveTab()
     if (!activeTab || activeTab.cart.length === 0) {
@@ -203,6 +211,7 @@ function POS({ userRole = 'cashier' }: POSProps) {
       tax: activeTab.tax,
       total: activeTab.total,
       payment_method: paymentMethod,
+      vat_applied: vatEnabled,
       tab_status: paymentMethod === 'outstanding' ? 'outstanding' : 'paid'
     }])
 
@@ -242,7 +251,7 @@ function POS({ userRole = 'cashier' }: POSProps) {
     <div className="pos-layout">
       <Toaster position="top-right" />
       
-      {/* Welcome Header with User Name, Date and Time */}
+      {/* Welcome Header */}
       <div style={{
         position: 'fixed',
         top: 0,
@@ -310,7 +319,7 @@ function POS({ userRole = 'cashier' }: POSProps) {
         </div>
       </div>
 
-      {/* Admin Panel Button - Only for admins */}
+      {/* Admin Panel Button */}
       {isAdmin && (
         <div style={{ position: 'fixed', top: '75px', right: '1rem', zIndex: 45 }}>
           <button
@@ -328,7 +337,7 @@ function POS({ userRole = 'cashier' }: POSProps) {
         </div>
       )}
 
-      {/* Admin Panel - VAT Toggle */}
+      {/* Admin Panel */}
       {showAdminPanel && isAdmin && (
         <div style={{
           position: 'fixed',
@@ -417,6 +426,30 @@ function POS({ userRole = 'cashier' }: POSProps) {
                 }}
                 className="cart-input"
               />
+            </div>
+
+            {/* VAT Checkbox for Cashier */}
+            <div style={{
+              padding: '0.75rem 1rem',
+              background: '#fef3c7',
+              borderRadius: '0.5rem',
+              marginBottom: '0.75rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: '500' }}>
+                <input
+                  type="checkbox"
+                  checked={vatEnabled}
+                  onChange={(e) => setVatEnabled(e.target.checked)}
+                  style={{ width: '1.25rem', height: '1.25rem', cursor: 'pointer' }}
+                />
+                <span>Apply VAT (5%) to this order</span>
+              </label>
+              <div style={{ fontSize: '0.875rem', color: '#92400e' }}>
+                {vatEnabled ? '✓ VAT will be added' : '✗ No VAT added'}
+              </div>
             </div>
 
             <div className="cart-items">
