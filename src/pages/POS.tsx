@@ -5,6 +5,7 @@ import { toast, Toaster } from 'react-hot-toast'
 
 interface POSProps {
   isAdmin?: boolean
+  userName?: string
 }
 
 interface Tab {
@@ -17,7 +18,7 @@ interface Tab {
   total: number
 }
 
-function POS({ isAdmin = false }: POSProps) {
+function POS({ isAdmin = false, userName = '' }: POSProps) {
   const [products, setProducts] = useState<Product[]>([])
   const [tabs, setTabs] = useState<Tab[]>([])
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
@@ -28,7 +29,6 @@ function POS({ isAdmin = false }: POSProps) {
   const [category, setCategory] = useState('All')
   const [vatEnabled, setVatEnabled] = useState(false)
   const [showVatToggle, setShowVatToggle] = useState(false)
-  const [userName, setUserName] = useState<string>('')
   const [currentTime, setCurrentTime] = useState<string>('')
   const [currentDate, setCurrentDate] = useState<string>('')
 
@@ -49,31 +49,22 @@ function POS({ isAdmin = false }: POSProps) {
   }, [])
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user?.email) {
-        const nameFromEmail = user.email.split('@')[0]
-        const formattedName = nameFromEmail.charAt(0).toUpperCase() + nameFromEmail.slice(1)
-        setUserName(formattedName)
-      }
-    })
-
     const updateDateTime = () => {
       const now = new Date()
       setCurrentDate(now.toLocaleDateString('en-NG', {
-        weekday: 'long',
+        weekday: 'short',
         year: 'numeric',
-        month: 'long',
+        month: 'short',
         day: 'numeric'
       }))
       setCurrentTime(now.toLocaleTimeString('en-NG', {
         hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
+        minute: '2-digit'
       }))
     }
     
     updateDateTime()
-    const interval = setInterval(updateDateTime, 1000)
+    const interval = setInterval(updateDateTime, 60000)
     
     return () => clearInterval(interval)
   }, [])
@@ -229,61 +220,56 @@ function POS({ isAdmin = false }: POSProps) {
   })
 
   return (
-    <div className="pos-layout" style={{ paddingTop: '0px' }}>
+    <div>
       <Toaster position="top-right" />
       
-      {/* Welcome Bar - Small, non-intrusive */}
+      {/* Info Bar */}
       <div style={{
-        background: 'linear-gradient(135deg, #1e3c2c 0%, #2d5a3f 100%)',
-        color: 'white',
-        padding: '8px 20px',
+        background: '#f3f4f6',
+        padding: '8px 24px',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
+        borderBottom: '1px solid #e5e7eb',
         fontSize: '13px'
       }}>
         <div>
-          Welcome, <strong>{userName || 'Staff'}</strong> ({isAdmin ? 'Admin' : 'Cashier'})
-        </div>
-        <div>
           {currentDate} | {currentTime}
         </div>
-      </div>
-      
-      {/* VAT Toggle Button */}
-      <div style={{ position: 'absolute', top: '60px', right: '16px', zIndex: 45 }}>
-        <button
-          onClick={() => setShowVatToggle(!showVatToggle)}
-          style={{
-            background: vatEnabled ? '#22c55e' : '#ef4444',
-            color: 'white',
-            padding: '4px 12px',
-            borderRadius: '16px',
-            fontSize: '11px',
-            fontWeight: 'bold',
-            border: 'none',
-            cursor: 'pointer'
-          }}
-        >
-          {vatEnabled ? 'VAT ON (5%)' : 'VAT OFF'}
-        </button>
+        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+          <button
+            onClick={() => setShowVatToggle(!showVatToggle)}
+            style={{
+              background: vatEnabled ? '#22c55e' : '#ef4444',
+              color: 'white',
+              padding: '4px 12px',
+              borderRadius: '16px',
+              fontSize: '11px',
+              fontWeight: 'bold',
+              border: 'none',
+              cursor: 'pointer'
+            }}
+          >
+            {vatEnabled ? 'VAT ON (5%)' : 'VAT OFF'}
+          </button>
+        </div>
       </div>
 
       {/* VAT Toggle Panel */}
       {showVatToggle && (
         <div style={{
-          position: 'absolute',
-          top: '95px',
-          right: '16px',
-          zIndex: 45,
+          position: 'fixed',
+          top: '110px',
+          right: '20px',
+          zIndex: 100,
           background: 'white',
-          padding: '12px',
+          padding: '16px',
           borderRadius: '8px',
           boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
           borderLeft: `4px solid ${vatEnabled ? '#22c55e' : '#ef4444'}`,
-          minWidth: '200px'
+          width: '240px'
         }}>
-          <h4 style={{ margin: '0 0 10px 0', fontSize: '13px' }}>VAT Control</h4>
+          <h4 style={{ margin: '0 0 12px 0', fontSize: '14px' }}>VAT Control</h4>
           <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
             <input
               type="checkbox"
@@ -301,19 +287,18 @@ function POS({ isAdmin = false }: POSProps) {
                 }
               }}
             />
-            <span style={{ fontSize: '13px' }}>Enable VAT (5%)</span>
+            <span>Enable VAT (5%)</span>
           </label>
           <button
             onClick={() => setShowVatToggle(false)}
             style={{
               width: '100%',
-              marginTop: '10px',
-              padding: '5px',
+              marginTop: '12px',
+              padding: '6px',
               background: '#e5e7eb',
               border: 'none',
               borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '11px'
+              cursor: 'pointer'
             }}
           >
             Close
@@ -322,57 +307,57 @@ function POS({ isAdmin = false }: POSProps) {
       )}
       
       {/* Tabs Bar */}
-      <div style={{ background: 'white', borderBottom: '1px solid #e5e7eb', padding: '0 16px' }}>
-        <div style={{ display: 'flex', overflowX: 'auto' }}>
+      <div style={{ background: 'white', borderBottom: '1px solid #e5e7eb', padding: '0 20px', overflowX: 'auto' }}>
+        <div style={{ display: 'flex', gap: '4px' }}>
           {tabs.map(tab => (
-            <div key={tab.id} style={{ display: 'flex', alignItems: 'center', borderRight: '1px solid #e5e7eb' }}>
+            <div key={tab.id} style={{ display: 'flex', alignItems: 'center' }}>
               <button
                 onClick={() => setActiveTabId(tab.id)}
                 style={{
-                  padding: '10px 16px',
-                  fontSize: '13px',
+                  padding: '12px 20px',
+                  fontSize: '14px',
                   background: 'none',
                   border: 'none',
                   cursor: 'pointer',
-                  background: activeTabId === tab.id ? '#f0fdf4' : 'transparent',
-                  color: activeTabId === tab.id ? '#22c55e' : '#374151',
-                  borderBottom: activeTabId === tab.id ? '2px solid #22c55e' : 'none'
+                  borderBottom: activeTabId === tab.id ? '2px solid #22c55e' : 'none',
+                  color: activeTabId === tab.id ? '#22c55e' : '#4b5563',
+                  fontWeight: activeTabId === tab.id ? 'bold' : 'normal'
                 }}
               >
                 {tab.customerName}
                 {tab.cart.length > 0 && (
-                  <span style={{ marginLeft: '6px', background: '#e5e7eb', padding: '0 5px', borderRadius: '10px', fontSize: '11px' }}>
+                  <span style={{ marginLeft: '8px', background: '#22c55e', color: 'white', padding: '2px 8px', borderRadius: '12px', fontSize: '11px' }}>
                     {tab.cart.length}
                   </span>
                 )}
               </button>
               <button
                 onClick={() => closeTab(tab.id)}
-                style={{ padding: '0 8px', color: '#9ca3af', fontSize: '18px', background: 'none', border: 'none', cursor: 'pointer' }}
+                style={{ padding: '0 8px', color: '#9ca3af', fontSize: '20px', background: 'none', border: 'none', cursor: 'pointer' }}
               >
                 ×
               </button>
             </div>
           ))}
-          <button onClick={() => setShowCustomerModal(true)} style={{ padding: '10px 16px', color: '#22c55e', background: 'none', border: 'none', cursor: 'pointer' }}>
+          <button onClick={() => setShowCustomerModal(true)} style={{ padding: '12px 20px', color: '#22c55e', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>
             + New Tab
           </button>
         </div>
       </div>
 
       {activeTab ? (
-        <div style={{ display: 'flex', minHeight: 'calc(100vh - 120px)' }}>
+        <div style={{ display: 'flex', minHeight: 'calc(100vh - 155px)' }}>
           {/* Products Section */}
-          <div style={{ flex: 1, padding: '20px' }}>
+          <div style={{ flex: 1, padding: '20px', overflowY: 'auto' }}>
             <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
               <input
                 type="text"
                 placeholder="Search products..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                style={{ flex: 1, padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '8px' }}
+                style={{ flex: 1, padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '8px', fontSize: '14px' }}
               />
-              <select value={category} onChange={(e) => setCategory(e.target.value)} style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '8px', background: 'white' }}>
+              <select value={category} onChange={(e) => setCategory(e.target.value)} style={{ padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '8px', background: 'white' }}>
                 {categories.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
@@ -394,9 +379,9 @@ function POS({ isAdmin = false }: POSProps) {
                     opacity: product.stock <= 0 ? 0.5 : 1
                   }}
                 >
-                  <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '4px' }}>{product.name}</div>
-                  <div style={{ color: '#22c55e', fontWeight: 'bold' }}>₦{product.price.toLocaleString()}</div>
-                  <div style={{ fontSize: '11px', color: product.stock <= 5 ? '#ef4444' : '#6b7280' }}>
+                  <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{product.name}</div>
+                  <div style={{ color: '#22c55e', fontWeight: 'bold', fontSize: '16px' }}>₦{product.price.toLocaleString()}</div>
+                  <div style={{ fontSize: '12px', color: product.stock <= 5 ? '#ef4444' : '#6b7280', marginTop: '4px' }}>
                     Stock: {product.stock}
                   </div>
                 </button>
@@ -405,13 +390,13 @@ function POS({ isAdmin = false }: POSProps) {
           </div>
 
           {/* Cart Section */}
-          <div style={{ width: '320px', background: 'white', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)', position: 'sticky', top: 0, boxShadow: '-4px 0 6px -1px rgba(0,0,0,0.1)' }}>
-            <div style={{ padding: '16px', borderBottom: '1px solid #e5e7eb' }}>
+          <div style={{ width: '360px', background: 'white', display: 'flex', flexDirection: 'column', borderLeft: '1px solid #e5e7eb' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>
               <h2 style={{ fontWeight: 'bold' }}>Current Order</h2>
             </div>
 
-            <div style={{ padding: '16px', borderBottom: '1px solid #e5e7eb' }}>
-              <label style={{ fontSize: '12px', fontWeight: '500' }}>Customer Name</label>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb' }}>
+              <label style={{ fontSize: '12px', fontWeight: '500', display: 'block', marginBottom: '4px' }}>Customer Name</label>
               <input
                 type="text"
                 value={activeTab.customerName}
@@ -421,33 +406,35 @@ function POS({ isAdmin = false }: POSProps) {
                     tab.id === activeTab.id ? { ...tab, customerName: newName } : tab
                   ))
                 }}
-                style={{ width: '100%', padding: '6px', border: '1px solid #d1d5db', borderRadius: '6px', marginTop: '4px' }}
+                style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px' }}
               />
             </div>
 
-            <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
               {activeTab.cart.map(item => (
-                <div key={item.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '8px' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 'bold', fontSize: '13px' }}>{item.name}</div>
-                    <div style={{ fontSize: '11px', color: '#6b7280' }}>₦{item.price.toLocaleString()}</div>
+                <div key={item.name} style={{ marginBottom: '12px', padding: '10px', border: '1px solid #e5e7eb', borderRadius: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontWeight: 'bold' }}>{item.name}</div>
+                      <div style={{ fontSize: '12px', color: '#6b7280' }}>₦{item.price.toLocaleString()}</div>
+                    </div>
+                    <div style={{ fontWeight: 'bold' }}>₦{item.total.toLocaleString()}</div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <button onClick={() => updateQuantity(item.name, -1)} style={{ width: '24px', height: '24px', background: '#e5e7eb', borderRadius: '4px', border: 'none', cursor: 'pointer' }}>-</button>
-                    <span style={{ width: '24px', textAlign: 'center' }}>{item.quantity}</span>
-                    <button onClick={() => updateQuantity(item.name, 1)} style={{ width: '24px', height: '24px', background: '#e5e7eb', borderRadius: '4px', border: 'none', cursor: 'pointer' }}>+</button>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+                    <button onClick={() => updateQuantity(item.name, -1)} style={{ width: '28px', height: '28px', background: '#f3f4f6', borderRadius: '4px', border: 'none', cursor: 'pointer' }}>-</button>
+                    <span>{item.quantity}</span>
+                    <button onClick={() => updateQuantity(item.name, 1)} style={{ width: '28px', height: '28px', background: '#f3f4f6', borderRadius: '4px', border: 'none', cursor: 'pointer' }}>+</button>
+                    <button onClick={() => updateQuantity(item.name, -item.quantity)} style={{ marginLeft: '8px', color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Remove</button>
                   </div>
-                  <div style={{ marginLeft: '12px', fontWeight: 'bold', minWidth: '70px', textAlign: 'right' }}>₦{item.total.toLocaleString()}</div>
-                  <button onClick={() => updateQuantity(item.name, -item.quantity)} style={{ marginLeft: '8px', color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>×</button>
                 </div>
               ))}
               {activeTab.cart.length === 0 && (
-                <div style={{ textAlign: 'center', color: '#6b7280', padding: '20px' }}>Cart is empty</div>
+                <div style={{ textAlign: 'center', color: '#6b7280', padding: '40px 20px' }}>Cart is empty</div>
               )}
             </div>
 
-            <div style={{ padding: '16px', borderTop: '1px solid #e5e7eb' }}>
-              <div style={{ marginBottom: '12px' }}>
+            <div style={{ padding: '16px 20px', borderTop: '1px solid #e5e7eb', background: '#f9fafb' }}>
+              <div style={{ marginBottom: '16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                   <span>Subtotal</span>
                   <span>₦{activeTab.subtotal.toLocaleString()}</span>
@@ -458,27 +445,27 @@ function POS({ isAdmin = false }: POSProps) {
                     <span>₦{activeTab.tax.toLocaleString()}</span>
                   </div>
                 )}
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '16px', paddingTop: '8px', borderTop: '1px solid #e5e7eb' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '18px', paddingTop: '8px', borderTop: '1px solid #e5e7eb' }}>
                   <span>Total</span>
                   <span>₦{activeTab.total.toLocaleString()}</span>
                 </div>
               </div>
 
-              <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', marginBottom: '12px' }}>
+              <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px', marginBottom: '12px' }}>
                 <option value="cash">Cash</option>
                 <option value="card">Card</option>
                 <option value="transfer">Transfer</option>
                 <option value="outstanding">Outstanding (Credit)</option>
               </select>
 
-              <button onClick={processSale} disabled={activeTab.cart.length === 0} style={{ width: '100%', background: '#22c55e', color: 'white', padding: '10px', borderRadius: '8px', fontWeight: 'bold', border: 'none', cursor: 'pointer', opacity: activeTab.cart.length === 0 ? 0.5 : 1 }}>
+              <button onClick={processSale} disabled={activeTab.cart.length === 0} style={{ width: '100%', background: '#22c55e', color: 'white', padding: '12px', borderRadius: '8px', fontWeight: 'bold', border: 'none', cursor: 'pointer', opacity: activeTab.cart.length === 0 ? 0.5 : 1 }}>
                 Complete Sale
               </button>
             </div>
           </div>
         </div>
       ) : (
-        <div style={{ textAlign: 'center', padding: '40px' }}>
+        <div style={{ textAlign: 'center', padding: '60px 20px' }}>
           No active tabs. Click + New Tab to start.
         </div>
       )}
