@@ -16,22 +16,14 @@ function Customers() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    phone: ''
-  })
+  const [formData, setFormData] = useState({ name: '', email: '', phone: '' })
 
   useEffect(() => {
     fetchCustomers()
   }, [])
 
   async function fetchCustomers() {
-    const { data, error } = await supabase
-      .from('customers')
-      .select('*')
-      .order('name')
-    
+    const { data, error } = await supabase.from('customers').select('*').order('name')
     if (error) {
       toast.error('Error fetching customers')
     } else {
@@ -45,16 +37,14 @@ function Customers() {
       return
     }
 
-    const { error } = await supabase
-      .from('customers')
-      .insert([{
-        name: formData.name,
-        email: formData.email || null,
-        phone: formData.phone || null,
-        loyalty_points: 0,
-        total_spent: 0,
-        outstanding_balance: 0
-      }])
+    const { error } = await supabase.from('customers').insert([{
+      name: formData.name,
+      email: formData.email || null,
+      phone: formData.phone || null,
+      loyalty_points: 0,
+      total_spent: 0,
+      outstanding_balance: 0
+    }])
 
     if (error) {
       toast.error(error.message)
@@ -75,13 +65,13 @@ function Customers() {
     <div className="customers-container">
       <Toaster position="top-right" />
       <div className="customers-header">
-        <h1 className="customers-title">Customers</h1>
+        <h1 className="customers-title">Customer Management</h1>
         <button onClick={() => setShowModal(true)} className="new-customer-btn">
           + New Customer
         </button>
       </div>
 
-      <div style={{ marginBottom: '1rem' }}>
+      <div style={{ marginBottom: '16px' }}>
         <input
           type="text"
           placeholder="Search by name or phone..."
@@ -108,26 +98,17 @@ function Customers() {
                 <td>{customer.name}</td>
                 <td>{customer.phone || '-'}</td>
                 <td className="text-right">{customer.loyalty_points}</td>
-                <td className="text-right text-red">
-                  ₦{(customer.outstanding_balance || 0).toLocaleString()}
-                </td>
+                <td className="text-right text-red">₦{(customer.outstanding_balance || 0).toLocaleString()}</td>
                 <td className="text-right">₦{(customer.total_spent || 0).toLocaleString()}</td>
               </tr>
             ))}
-            {filteredCustomers.length === 0 && (
-              <tr>
-                <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
-                  No customers found
-                </td>
-              </tr>
-            )}
           </tbody>
         </table>
       </div>
 
       {showModal && (
         <div className="modal-overlay">
-          <div className="modal">
+          <div className="modal" style={{ width: '320px' }}>
             <h2 className="modal-title">New Customer</h2>
             <input
               type="text"
@@ -135,7 +116,7 @@ function Customers() {
               value={formData.name}
               onChange={(e) => setFormData({...formData, name: e.target.value})}
               className="cart-input"
-              style={{ marginBottom: '0.75rem' }}
+              style={{ marginBottom: '12px' }}
             />
             <input
               type="email"
@@ -143,7 +124,7 @@ function Customers() {
               value={formData.email}
               onChange={(e) => setFormData({...formData, email: e.target.value})}
               className="cart-input"
-              style={{ marginBottom: '0.75rem' }}
+              style={{ marginBottom: '12px' }}
             />
             <input
               type="tel"
@@ -151,15 +132,11 @@ function Customers() {
               value={formData.phone}
               onChange={(e) => setFormData({...formData, phone: e.target.value})}
               className="cart-input"
-              style={{ marginBottom: '1rem' }}
+              style={{ marginBottom: '16px' }}
             />
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button onClick={createCustomer} className="new-customer-btn" style={{ flex: 1 }}>
-                Create
-              </button>
-              <button onClick={() => setShowModal(false)} className="modal-cancel" style={{ flex: 1 }}>
-                Cancel
-              </button>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button onClick={createCustomer} className="new-customer-btn" style={{ flex: 1 }}>Create</button>
+              <button onClick={() => setShowModal(false)} className="modal-cancel" style={{ flex: 1 }}>Cancel</button>
             </div>
           </div>
         </div>
