@@ -14,6 +14,7 @@ function AdminDashboard() {
   const [selectedDate, setSelectedDate] = useState<string>('')
   const [lowStockProducts, setLowStockProducts] = useState<any[]>([])
   const [selectedCustomers, setSelectedCustomers] = useState<any[]>([])
+  const [topCustomers, setTopCustomers] = useState<any[]>([])
 
   useEffect(() => {
     fetchAllData()
@@ -23,7 +24,8 @@ function AdminDashboard() {
     setLoading(true)
     await Promise.all([
       fetchSalesData(),
-      fetchLowStockAlerts()
+      fetchLowStockAlerts(),
+      fetchTopCustomers()
     ])
     setLoading(false)
   }
@@ -98,7 +100,7 @@ function AdminDashboard() {
         .select('customer_name, total')
         .gte('created_at', startDate.toISOString())
         .lt('created_at', endDate.toISOString())
-        .limit(50)
+        .limit(100)
       
       if (data && data.length > 0) {
         const customerMap = new Map()
@@ -110,12 +112,54 @@ function AdminDashboard() {
             customerMap.set(inv.customer_name, { name: inv.customer_name, total: inv.total })
           }
         })
-        setSelectedCustomers(Array.from(customerMap.values()).slice(0, 10))
+        
+        // Filter customers with minimum ₦50,000 sales for the day
+        const filteredCustomers = Array.from(customerMap.values())
+          .filter(c => c.total >= 50000)
+          .sort((a, b) => b.total - a.total)
+          .slice(0, 10)
+        
+        setSelectedCustomers(filteredCustomers)
       } else {
         setSelectedCustomers([])
       }
     } catch (err) {
       console.error('Error fetching customers:', err)
+    }
+  }
+
+  async function fetchTopCustomers() {
+    try {
+      const sevenDaysAgo = new Date()
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+      
+      const { data } = await supabase
+        .from('invoices')
+        .select('customer_name, total')
+        .gte('created_at', sevenDaysAgo.toISOString())
+        .limit(500)
+      
+      if (data && data.length > 0) {
+        const customerMap = new Map()
+        data.forEach(inv => {
+          const existing = customerMap.get(inv.customer_name)
+          if (existing) {
+            existing.total += inv.total
+          } else {
+            customerMap.set(inv.customer_name, { name: inv.customer_name, total: inv.total })
+          }
+        })
+        
+        // Filter customers with minimum ₦50,000 sales in last 7 days
+        const filteredTopCustomers = Array.from(customerMap.values())
+          .filter(c => c.total >= 50000)
+          .sort((a, b) => b.total - a.total)
+          .slice(0, 10)
+        
+        setTopCustomers(filteredTopCustomers)
+      }
+    } catch (err) {
+      console.error('Error fetching top customers:', err)
     }
   }
 
@@ -187,6 +231,42 @@ function AdminDashboard() {
         </div>
       </div>
 
+      {/* Top Customers Section - Last 7 Days (Min ₦50K) */}
+      <div style={{ background: 'white', borderRadius: '12px', padding: '20px', marginBottom: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+        <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '20px' }}>🏆 Top Customers (Last 7 Days - Min ₦50K)</h3>
+        {topCustomers.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280', fontSize: '13px' }}>
+            No customers with ₦50,000+ sales in the last 7 days
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
+                  <th style={{ textAlign: 'left', padding: '10px', fontSize: '13px', color: '#6b7280' }}>Rank</th>
+                  <th style={{ textAlign: 'left', padding: '10px', fontSize: '13px', color: '#6b7280' }}>Customer Name</th>
+                  <th style={{ textAlign: 'right', padding: '10px', fontSize: '13px', color: '#6b7280' }}>Total Spent (7 days)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topCustomers.map((customer, idx) => (
+                  <tr key={idx} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                    <td style={{ padding: '10px', fontSize: '14px' }}>
+                      {idx === 0 && '🥇'}
+                      {idx === 1 && '🥈'}
+                      {idx === 2 && '🥉'}
+                      {idx > 2 && `${idx + 1}.`}
+                    </td>
+                    <td style={{ padding: '10px', fontSize: '14px' }}>{customer.name}</td>
+                    <td style={{ padding: '10px', textAlign: 'right', fontWeight: 'bold', fontSize: '14px' }}>₦{customer.total.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       {/* Simple Chart - Bar Chart for Sales Trend */}
       <div style={{ background: 'white', borderRadius: '12px', padding: '20px', marginBottom: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '20px' }}>Sales Trend (Last 7 Days)</h3>
@@ -196,14 +276,15 @@ function AdminDashboard() {
             const height = (day.total_sales / maxSale) * 160
             return (
               <div key={day.date} style={{ flex: '1', minWidth: '60px', textAlign: 'center' }}>
-                <div style={{ 
-                  height: `${height}px`, 
-                  background: '#22c55e', 
-                  borderRadius: '4px 4px 0 0',
-                  transition: 'height 0.3s ease',
-                  cursor: 'pointer'
-                }}
-                onClick={() => handleDateSelect(day.date)}
+                <div 
+                  style={{ 
+                    height: `${height}px`, 
+                    background: selectedDate === day.date ? '#22c55e' : '#86efac', 
+                    borderRadius: '4px 4px 0 0',
+                    transition: 'height 0.3s ease',
+                    cursor: 'pointer'
+                  }}
+                  onClick={() => handleDateSelect(day.date)}
                 />
                 <div style={{ fontSize: '10px', marginTop: '8px', color: selectedDate === day.date ? '#22c55e' : '#6b7280', fontWeight: selectedDate === day.date ? 'bold' : 'normal' }}>
                   {day.date.split('/')[0]}/{day.date.split('/')[1]}
@@ -262,7 +343,7 @@ function AdminDashboard() {
 
           {selectedCustomers.length > 0 && (
             <>
-              <h3 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '12px', color: '#4b5563' }}>Top Customers</h3>
+              <h3 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '12px', color: '#4b5563' }}>Top Customers (Min ₦50K)</h3>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
@@ -282,6 +363,12 @@ function AdminDashboard() {
                 </table>
               </div>
             </>
+          )}
+          
+          {selectedCustomers.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280', fontSize: '13px', background: '#f9fafb', borderRadius: '8px' }}>
+              No customers with ₦50,000+ sales on this day
+            </div>
           )}
         </div>
       )}
