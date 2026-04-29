@@ -33,7 +33,6 @@ function App() {
       setShowAdminPrompt(false)
       setCurrentView('admin')
       setAdminPassword('')
-      toast.success('Admin access granted')
     } else {
       alert('Invalid admin password')
       setAdminPassword('')
@@ -82,38 +81,78 @@ function App() {
         </div>
       )}
 
-      <div className="header">
-        <div className="nav-buttons">
-          <button
-            onClick={() => setCurrentView('pos')}
-            className={`nav-btn ${currentView === 'pos' ? 'nav-btn-active' : 'nav-btn-inactive'}`}
-          >
-            POS Terminal
-          </button>
-          <button
-            onClick={() => {
-              if (isAdmin) {
-                setCurrentView('customers')
-              } else {
-                setShowAdminPrompt(true)
-              }
-            }}
-            className={`nav-btn ${currentView === 'customers' ? 'nav-btn-active' : 'nav-btn-inactive'}`}
-          >
-            Customer Management
-          </button>
-          <button
-            onClick={() => {
-              if (isAdmin) {
-                setCurrentView('admin')
-              } else {
-                setShowAdminPrompt(true)
-              }
-            }}
-            className={`nav-btn ${currentView === 'admin' ? 'nav-btn-active' : 'nav-btn-inactive'}`}
-          >
-            Super Admin Panel
-          </button>
+      {/* Navigation Header - No overlap */}
+      <div style={{
+        background: 'white',
+        borderBottom: '1px solid #e5e7eb',
+        padding: '12px 24px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        position: 'relative',
+        zIndex: 10
+      }}>
+        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+          <h1 style={{ fontSize: '20px', fontWeight: 'bold', color: '#1e3c2c' }}>🍺 Ibile POS</h1>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={() => setCurrentView('pos')}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: '500',
+                background: currentView === 'pos' ? '#22c55e' : 'transparent',
+                color: currentView === 'pos' ? 'white' : '#4b5563',
+                border: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              POS Terminal
+            </button>
+            <button
+              onClick={() => {
+                if (isAdmin) {
+                  setCurrentView('customers')
+                } else {
+                  setShowAdminPrompt(true)
+                }
+              }}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: '500',
+                background: currentView === 'customers' ? '#22c55e' : 'transparent',
+                color: currentView === 'customers' ? 'white' : '#4b5563',
+                border: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              Customers
+            </button>
+            <button
+              onClick={() => {
+                if (isAdmin) {
+                  setCurrentView('admin')
+                } else {
+                  setShowAdminPrompt(true)
+                }
+              }}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: '500',
+                background: currentView === 'admin' ? '#22c55e' : 'transparent',
+                color: currentView === 'admin' ? 'white' : '#4b5563',
+                border: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              Super Admin
+            </button>
+          </div>
         </div>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           {isAdmin && (
@@ -124,30 +163,36 @@ function App() {
           {!isAdmin && (
             <button
               onClick={() => setShowAdminPrompt(true)}
-              style={{ background: '#3b82f6', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '12px' }}
+              style={{ background: '#3b82f6', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', border: 'none', cursor: 'pointer' }}
             >
               Admin Login
             </button>
           )}
-          <button onClick={() => supabase.auth.signOut()} className="logout-btn">
+          <button
+            onClick={() => supabase.auth.signOut()}
+            style={{ background: 'transparent', color: '#dc2626', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', border: 'none', cursor: 'pointer' }}
+          >
             Sign Out
           </button>
         </div>
       </div>
 
-      {currentView === 'pos' && <POS isAdmin={isAdmin} />}
-      {currentView === 'customers' && isAdmin && <Customers />}
-      {currentView === 'customers' && !isAdmin && (
-        <div className="customers-container" style={{ textAlign: 'center', padding: '40px' }}>
-          <p>Admin access required. Click "Admin Login" and enter password.</p>
-        </div>
-      )}
-      {currentView === 'admin' && isAdmin && <AdminPanel />}
-      {currentView === 'admin' && !isAdmin && (
-        <div className="customers-container" style={{ textAlign: 'center', padding: '40px' }}>
-          <p>Admin access required. Click "Admin Login" and enter password.</p>
-        </div>
-      )}
+      {/* Content Area - No header overlap */}
+      <div>
+        {currentView === 'pos' && <POS isAdmin={isAdmin} />}
+        {currentView === 'customers' && isAdmin && <Customers />}
+        {currentView === 'customers' && !isAdmin && (
+          <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+            <p>Admin access required. Click "Admin Login" and enter password.</p>
+          </div>
+        )}
+        {currentView === 'admin' && isAdmin && <AdminPanel />}
+        {currentView === 'admin' && !isAdmin && (
+          <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+            <p>Admin access required. Click "Admin Login" and enter password.</p>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
