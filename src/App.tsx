@@ -27,6 +27,10 @@ function App() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
+      if (session?.user?.email) {
+        const name = session.user.email.split('@')[0]
+        setUserName(name.charAt(0).toUpperCase() + name.slice(1))
+      }
     })
 
     return () => subscription.unsubscribe()
@@ -37,6 +41,7 @@ function App() {
       setIsAdmin(true)
       setShowAdminPrompt(false)
       setAdminPassword('')
+      setCurrentView('admin')
     } else {
       alert('Invalid admin password')
       setAdminPassword('')
@@ -85,7 +90,7 @@ function App() {
         </div>
       )}
 
-      {/* Main Navigation Header */}
+      {/* Main Header */}
       <div style={{
         background: '#1e3c2c',
         color: 'white',
@@ -96,7 +101,7 @@ function App() {
         flexWrap: 'wrap',
         gap: '12px'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
           <h1 style={{ fontSize: '20px', fontWeight: 'bold' }}>🍺 Ibile POS</h1>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <button
