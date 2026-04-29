@@ -35,6 +35,7 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
   const [category, setCategory] = useState('All')
   const [vatEnabled, setVatEnabled] = useState(false)
   const [showVatToggle, setShowVatToggle] = useState(false)
+  const [showProducts, setShowProducts] = useState(true)
   const [currentTime, setCurrentTime] = useState<string>('')
   const [currentDate, setCurrentDate] = useState<string>('')
 
@@ -116,7 +117,6 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
       setNewCustomerPhone('')
       setNewCustomerEmail('')
       setCustomerSearch('')
-      // Automatically select the new customer and create tab
       createNewTab(data)
       setShowCustomerModal(false)
     }
@@ -175,6 +175,11 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
       newCart = [...activeTab.cart, { name: product.name, quantity: 1, price: product.price, total: product.price }]
     }
     updateTabCart(activeTab.id, newCart)
+    
+    // On mobile, auto-hide products after adding to cart
+    if (window.innerWidth <= 768) {
+      setShowProducts(false)
+    }
   }
 
   const updateQuantity = (itemName: string, delta: number) => {
@@ -264,45 +269,46 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
     return matchesSearch && matchesCategory
   })
 
-  // Filter customers based on search
   const filteredCustomers = customers.filter(c => 
     c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
     (c.phone && c.phone.includes(customerSearch))
   )
 
   return (
-    <div>
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <Toaster position="top-right" />
       
       {/* Info Bar */}
       <div style={{
         background: '#f3f4f6',
-        padding: '8px 24px',
+        padding: '6px 16px',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
         borderBottom: '1px solid #e5e7eb',
-        fontSize: '13px'
+        fontSize: '11px',
+        flexWrap: 'wrap',
+        gap: '8px'
       }}>
         <div>
           {currentDate} | {currentTime}
         </div>
-        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
           <span>👤 {userName || 'Cashier'}</span>
           <button
             onClick={() => setShowVatToggle(!showVatToggle)}
             style={{
               background: vatEnabled ? '#22c55e' : '#ef4444',
               color: 'white',
-              padding: '4px 12px',
+              padding: '2px 10px',
               borderRadius: '16px',
-              fontSize: '11px',
+              fontSize: '10px',
               fontWeight: 'bold',
               border: 'none',
               cursor: 'pointer'
             }}
           >
-            {vatEnabled ? 'VAT ON (5%)' : 'VAT OFF'}
+            {vatEnabled ? 'VAT ON' : 'VAT OFF'}
           </button>
         </div>
       </div>
@@ -311,17 +317,17 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
       {showVatToggle && (
         <div style={{
           position: 'fixed',
-          top: '110px',
-          right: '20px',
+          top: '80px',
+          right: '10px',
           zIndex: 100,
           background: 'white',
-          padding: '16px',
+          padding: '12px',
           borderRadius: '8px',
           boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
           borderLeft: `4px solid ${vatEnabled ? '#22c55e' : '#ef4444'}`,
-          width: '240px'
+          width: '200px'
         }}>
-          <h4 style={{ margin: '0 0 12px 0', fontSize: '14px' }}>VAT Control</h4>
+          <h4 style={{ margin: '0 0 10px 0', fontSize: '13px' }}>VAT Control</h4>
           <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
             <input
               type="checkbox"
@@ -339,18 +345,19 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
                 }
               }}
             />
-            <span>Enable VAT (5%)</span>
+            <span style={{ fontSize: '13px' }}>Enable VAT (5%)</span>
           </label>
           <button
             onClick={() => setShowVatToggle(false)}
             style={{
               width: '100%',
-              marginTop: '12px',
-              padding: '6px',
+              marginTop: '10px',
+              padding: '5px',
               background: '#e5e7eb',
               border: 'none',
               borderRadius: '4px',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              fontSize: '11px'
             }}
           >
             Close
@@ -359,33 +366,34 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
       )}
       
       {/* Tabs Bar */}
-      <div style={{ background: 'white', borderBottom: '1px solid #e5e7eb', padding: '0 20px', overflowX: 'auto' }}>
-        <div style={{ display: 'flex', gap: '4px' }}>
+      <div style={{ background: 'white', borderBottom: '1px solid #e5e7eb', padding: '0 12px', overflowX: 'auto', flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: '2px', minWidth: 'max-content' }}>
           {tabs.map(tab => (
             <div key={tab.id} style={{ display: 'flex', alignItems: 'center' }}>
               <button
                 onClick={() => setActiveTabId(tab.id)}
                 style={{
-                  padding: '12px 20px',
-                  fontSize: '14px',
+                  padding: '10px 14px',
+                  fontSize: '13px',
                   background: 'none',
                   border: 'none',
                   cursor: 'pointer',
                   borderBottom: activeTabId === tab.id ? '2px solid #22c55e' : 'none',
                   color: activeTabId === tab.id ? '#22c55e' : '#4b5563',
-                  fontWeight: activeTabId === tab.id ? 'bold' : 'normal'
+                  fontWeight: activeTabId === tab.id ? 'bold' : 'normal',
+                  whiteSpace: 'nowrap'
                 }}
               >
-                {tab.customerName}
+                {tab.customerName.length > 15 ? tab.customerName.substring(0, 12) + '...' : tab.customerName}
                 {tab.cart.length > 0 && (
-                  <span style={{ marginLeft: '8px', background: '#22c55e', color: 'white', padding: '2px 8px', borderRadius: '12px', fontSize: '11px' }}>
+                  <span style={{ marginLeft: '6px', background: '#22c55e', color: 'white', padding: '2px 6px', borderRadius: '10px', fontSize: '10px' }}>
                     {tab.cart.length}
                   </span>
                 )}
               </button>
               <button
                 onClick={() => closeTab(tab.id)}
-                style={{ padding: '0 8px', color: '#9ca3af', fontSize: '20px', background: 'none', border: 'none', cursor: 'pointer' }}
+                style={{ padding: '0 6px', color: '#9ca3af', fontSize: '18px', background: 'none', border: 'none', cursor: 'pointer' }}
               >
                 ×
               </button>
@@ -395,133 +403,179 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
             setCustomerSearch('')
             setShowAddCustomerForm(false)
             setShowCustomerModal(true)
-          }} style={{ padding: '12px 20px', color: '#22c55e', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>
+          }} style={{ padding: '10px 14px', color: '#22c55e', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
             + New Tab
           </button>
         </div>
       </div>
 
       {activeTab ? (
-        <div style={{ display: 'flex', minHeight: 'calc(100vh - 155px)' }}>
-          {/* Products Section */}
-          <div style={{ flex: 1, padding: '20px', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
-              <input
-                type="text"
-                placeholder="Search products..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                style={{ flex: 1, padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '8px', fontSize: '14px' }}
-              />
-              <select value={category} onChange={(e) => setCategory(e.target.value)} style={{ padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '8px', background: 'white' }}>
-                {categories.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          {/* Mobile Toggle Button */}
+          <button
+            onClick={() => setShowProducts(!showProducts)}
+            style={{
+              display: 'none',
+              '@media (max-width: 768px)': { display: 'flex' },
+              background: '#22c55e',
+              color: 'white',
+              padding: '8px',
+              margin: '8px',
+              borderRadius: '8px',
+              border: 'none',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+              justifyContent: 'center'
+            }}
+            className="mobile-toggle-btn"
+          >
+            {showProducts ? '📦 Hide Products' : '📦 Show Products'}
+          </button>
+          
+          <div style={{ display: 'flex', flex: 1, overflow: 'hidden', flexDirection: window.innerWidth <= 768 ? 'column' : 'row' }}>
+            {/* Products Section - Collapsible on mobile */}
+            <div style={{ 
+              flex: window.innerWidth <= 768 ? 'auto' : 1, 
+              display: window.innerWidth <= 768 ? (showProducts ? 'block' : 'none') : 'block',
+              padding: '12px',
+              overflowY: 'auto',
+              height: window.innerWidth <= 768 ? 'auto' : '100%',
+              maxHeight: window.innerWidth <= 768 ? '50vh' : '100%'
+            }}>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                <input
+                  type="text"
+                  placeholder="Search products..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  style={{ flex: 1, padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: '8px', fontSize: '13px', minWidth: '120px' }}
+                />
+                <select value={category} onChange={(e) => setCategory(e.target.value)} style={{ padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: '8px', background: 'white', fontSize: '13px' }}>
+                  {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px' }}>
-              {filteredProducts.map(product => (
-                <button 
-                  key={product.id} 
-                  onClick={() => addToCart(product)} 
-                  disabled={product.stock <= 0}
-                  style={{
-                    background: 'white',
-                    padding: '12px',
-                    borderRadius: '8px',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                    textAlign: 'left',
-                    border: 'none',
-                    cursor: product.stock <= 0 ? 'not-allowed' : 'pointer',
-                    opacity: product.stock <= 0 ? 0.5 : 1
-                  }}
-                >
-                  <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{product.name}</div>
-                  <div style={{ color: '#22c55e', fontWeight: 'bold', fontSize: '16px' }}>₦{product.price.toLocaleString()}</div>
-                  <div style={{ fontSize: '12px', color: product.stock <= 5 ? '#ef4444' : '#6b7280', marginTop: '4px' }}>
-                    Stock: {product.stock}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Cart Section */}
-          <div style={{ width: '360px', background: 'white', display: 'flex', flexDirection: 'column', borderLeft: '1px solid #e5e7eb' }}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>
-              <h2 style={{ fontWeight: 'bold' }}>Current Order</h2>
-            </div>
-
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb' }}>
-              <label style={{ fontSize: '12px', fontWeight: '500', display: 'block', marginBottom: '4px' }}>Customer Name</label>
-              <input
-                type="text"
-                value={activeTab.customerName}
-                onChange={(e) => {
-                  const newName = e.target.value
-                  setTabs(prev => prev.map(tab =>
-                    tab.id === activeTab.id ? { ...tab, customerName: newName } : tab
-                  ))
-                }}
-                style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px' }}
-              />
-            </div>
-
-            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
-              {activeTab.cart.map(item => (
-                <div key={item.name} style={{ marginBottom: '12px', padding: '10px', border: '1px solid #e5e7eb', borderRadius: '8px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <div style={{ fontWeight: 'bold' }}>{item.name}</div>
-                      <div style={{ fontSize: '12px', color: '#6b7280' }}>₦{item.price.toLocaleString()}</div>
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', 
+                gap: '10px'
+              }}>
+                {filteredProducts.map(product => (
+                  <button 
+                    key={product.id} 
+                    onClick={() => addToCart(product)} 
+                    disabled={product.stock <= 0}
+                    style={{
+                      background: 'white',
+                      padding: '10px',
+                      borderRadius: '8px',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                      textAlign: 'left',
+                      border: 'none',
+                      cursor: product.stock <= 0 ? 'not-allowed' : 'pointer',
+                      opacity: product.stock <= 0 ? 0.5 : 1
+                    }}
+                  >
+                    <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '4px' }}>{product.name}</div>
+                    <div style={{ color: '#22c55e', fontWeight: 'bold', fontSize: '14px' }}>₦{product.price.toLocaleString()}</div>
+                    <div style={{ fontSize: '10px', color: product.stock <= 5 ? '#ef4444' : '#6b7280', marginTop: '4px' }}>
+                      Stock: {product.stock}
                     </div>
-                    <div style={{ fontWeight: 'bold' }}>₦{item.total.toLocaleString()}</div>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
-                    <button onClick={() => updateQuantity(item.name, -1)} style={{ width: '28px', height: '28px', background: '#f3f4f6', borderRadius: '4px', border: 'none', cursor: 'pointer' }}>-</button>
-                    <span>{item.quantity}</span>
-                    <button onClick={() => updateQuantity(item.name, 1)} style={{ width: '28px', height: '28px', background: '#f3f4f6', borderRadius: '4px', border: 'none', cursor: 'pointer' }}>+</button>
-                    <button onClick={() => updateQuantity(item.name, -item.quantity)} style={{ marginLeft: '8px', color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Remove</button>
-                  </div>
-                </div>
-              ))}
-              {activeTab.cart.length === 0 && (
-                <div style={{ textAlign: 'center', color: '#6b7280', padding: '40px 20px' }}>Cart is empty</div>
+                  </button>
+                ))}
+              </div>
+              {filteredProducts.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>No products found</div>
               )}
             </div>
 
-            <div style={{ padding: '16px 20px', borderTop: '1px solid #e5e7eb', background: '#f9fafb' }}>
-              <div style={{ marginBottom: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <span>Subtotal</span>
-                  <span>₦{activeTab.subtotal.toLocaleString()}</span>
-                </div>
-                {vatEnabled && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px', color: '#6b7280' }}>
-                    <span>VAT (5%)</span>
-                    <span>₦{activeTab.tax.toLocaleString()}</span>
-                  </div>
-                )}
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '18px', paddingTop: '8px', borderTop: '1px solid #e5e7eb' }}>
-                  <span>Total</span>
-                  <span>₦{activeTab.total.toLocaleString()}</span>
-                </div>
+            {/* Cart Section - Always visible on mobile */}
+            <div style={{ 
+              width: window.innerWidth <= 768 ? '100%' : '340px', 
+              background: 'white', 
+              display: 'flex', 
+              flexDirection: 'column',
+              borderLeft: window.innerWidth <= 768 ? 'none' : '1px solid #e5e7eb',
+              borderTop: window.innerWidth <= 768 ? '1px solid #e5e7eb' : 'none',
+              height: window.innerWidth <= 768 ? 'auto' : '100%',
+              maxHeight: window.innerWidth <= 768 ? '45vh' : '100%'
+            }}>
+              <div style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', background: '#f9fafb', flexShrink: 0 }}>
+                <h2 style={{ fontWeight: 'bold', fontSize: '16px' }}>Current Order - {activeTab.customerName}</h2>
               </div>
 
-              <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px', marginBottom: '12px' }}>
-                <option value="cash">Cash</option>
-                <option value="card">Card</option>
-                <option value="transfer">Transfer</option>
-                <option value="outstanding">Outstanding (Credit)</option>
-              </select>
+              <div style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 }}>
+                <label style={{ fontSize: '11px', fontWeight: '500', display: 'block', marginBottom: '4px' }}>Customer Name</label>
+                <input
+                  type="text"
+                  value={activeTab.customerName}
+                  onChange={(e) => {
+                    const newName = e.target.value
+                    setTabs(prev => prev.map(tab =>
+                      tab.id === activeTab.id ? { ...tab, customerName: newName } : tab
+                    ))
+                  }}
+                  style={{ width: '100%', padding: '6px 8px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '13px' }}
+                />
+              </div>
 
-              <button onClick={processSale} disabled={activeTab.cart.length === 0} style={{ width: '100%', background: '#22c55e', color: 'white', padding: '12px', borderRadius: '8px', fontWeight: 'bold', border: 'none', cursor: 'pointer', opacity: activeTab.cart.length === 0 ? 0.5 : 1 }}>
-                Complete Sale
-              </button>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
+                {activeTab.cart.map(item => (
+                  <div key={item.name} style={{ marginBottom: '10px', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <div>
+                        <div style={{ fontWeight: 'bold', fontSize: '13px' }}>{item.name}</div>
+                        <div style={{ fontSize: '11px', color: '#6b7280' }}>₦{item.price.toLocaleString()}</div>
+                      </div>
+                      <div style={{ fontWeight: 'bold', fontSize: '14px' }}>₦{item.total.toLocaleString()}</div>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px' }}>
+                      <button onClick={() => updateQuantity(item.name, -1)} style={{ width: '26px', height: '26px', background: '#f3f4f6', borderRadius: '4px', border: 'none', cursor: 'pointer', fontSize: '14px' }}>-</button>
+                      <span style={{ fontSize: '13px' }}>{item.quantity}</span>
+                      <button onClick={() => updateQuantity(item.name, 1)} style={{ width: '26px', height: '26px', background: '#f3f4f6', borderRadius: '4px', border: 'none', cursor: 'pointer', fontSize: '14px' }}>+</button>
+                      <button onClick={() => updateQuantity(item.name, -item.quantity)} style={{ marginLeft: '4px', color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px' }}>Remove</button>
+                    </div>
+                  </div>
+                ))}
+                {activeTab.cart.length === 0 && (
+                  <div style={{ textAlign: 'center', color: '#6b7280', padding: '30px 12px', fontSize: '13px' }}>Cart is empty. Add items from the products section.</div>
+                )}
+              </div>
+
+              <div style={{ padding: '12px', borderTop: '1px solid #e5e7eb', background: '#f9fafb', flexShrink: 0 }}>
+                <div style={{ marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '13px' }}>
+                    <span>Subtotal</span>
+                    <span>₦{activeTab.subtotal.toLocaleString()}</span>
+                  </div>
+                  {vatEnabled && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '12px', color: '#6b7280' }}>
+                      <span>VAT (5%)</span>
+                      <span>₦{activeTab.tax.toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '16px', paddingTop: '6px', borderTop: '1px solid #e5e7eb' }}>
+                    <span>Total</span>
+                    <span style={{ color: '#22c55e' }}>₦{activeTab.total.toLocaleString()}</span>
+                  </div>
+                </div>
+
+                <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', marginBottom: '10px', fontSize: '13px' }}>
+                  <option value="cash">Cash</option>
+                  <option value="card">Card</option>
+                  <option value="transfer">Transfer</option>
+                  <option value="outstanding">Outstanding (Credit)</option>
+                </select>
+
+                <button onClick={processSale} disabled={activeTab.cart.length === 0} style={{ width: '100%', background: '#22c55e', color: 'white', padding: '10px', borderRadius: '8px', fontWeight: 'bold', border: 'none', cursor: 'pointer', fontSize: '14px', opacity: activeTab.cart.length === 0 ? 0.5 : 1 }}>
+                  Complete Sale
+                </button>
+              </div>
             </div>
           </div>
         </div>
       ) : (
-        <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+        <div style={{ textAlign: 'center', padding: '40px 20px', flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           No active tabs. Click + New Tab to start.
         </div>
       )}
@@ -529,8 +583,8 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
       {/* Customer Modal - Searchable with Add Customer */}
       {showCustomerModal && (
         <div className="modal-overlay">
-          <div className="modal" style={{ width: '400px', maxHeight: '80vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-            <h2 className="modal-title" style={{ marginBottom: '16px' }}>Select Customer</h2>
+          <div className="modal" style={{ width: window.innerWidth <= 480 ? '95%' : '400px', maxHeight: '80vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <h2 className="modal-title" style={{ marginBottom: '16px', fontSize: '18px' }}>Select Customer</h2>
             
             {/* Search Input */}
             <input
@@ -549,7 +603,6 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
               autoFocus
             />
             
-            {/* Customer List */}
             {!showAddCustomerForm ? (
               <>
                 <div style={{ flex: 1, overflowY: 'auto', maxHeight: '300px' }}>
@@ -571,11 +624,10 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
                       cursor: 'pointer'
                     }}
                   >
-                    <div className="customer-name" style={{ fontWeight: 'bold' }}>🚶 Walk-in Customer</div>
-                    <div className="customer-outstanding" style={{ fontSize: '11px', color: '#6b7280' }}>No customer record needed</div>
+                    <div style={{ fontWeight: 'bold' }}>🚶 Walk-in Customer</div>
+                    <div style={{ fontSize: '11px', color: '#6b7280' }}>No customer record needed</div>
                   </button>
                   
-                  {/* Existing Customers */}
                   {filteredCustomers.length === 0 && customerSearch ? (
                     <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280' }}>
                       No customers found matching "{customerSearch}"
@@ -597,15 +649,12 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
                           borderRadius: '8px',
                           marginBottom: '8px',
                           background: 'white',
-                          cursor: 'pointer',
-                          transition: 'background 0.2s'
+                          cursor: 'pointer'
                         }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = '#f9fafb'}
-                        onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
                       >
-                        <div className="customer-name" style={{ fontWeight: 'bold' }}>{c.name}</div>
-                        {c.phone && <div style={{ fontSize: '12px', color: '#6b7280' }}>📞 {c.phone}</div>}
-                        <div style={{ fontSize: '11px', color: '#ef4444', marginTop: '4px' }}>
+                        <div style={{ fontWeight: 'bold' }}>{c.name}</div>
+                        {c.phone && <div style={{ fontSize: '11px', color: '#6b7280' }}>📞 {c.phone}</div>}
+                        <div style={{ fontSize: '10px', color: '#ef4444', marginTop: '4px' }}>
                           Outstanding: ₦{(c.outstanding_balance || 0).toLocaleString()}
                         </div>
                       </button>
@@ -613,7 +662,6 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
                   )}
                 </div>
                 
-                {/* Add New Customer Button */}
                 <button
                   onClick={() => setShowAddCustomerForm(true)}
                   style={{
@@ -633,7 +681,6 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
               </>
             ) : (
               <>
-                {/* Add Customer Form */}
                 <div style={{ flex: 1, overflowY: 'auto' }}>
                   <div style={{ marginBottom: '12px' }}>
                     <label style={{ fontSize: '12px', fontWeight: '500', display: 'block', marginBottom: '4px' }}>Customer Name *</label>
@@ -708,7 +755,6 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
               </>
             )}
             
-            {/* Cancel Button */}
             <button
               onClick={() => {
                 setShowCustomerModal(false);
@@ -734,6 +780,15 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
           </div>
         </div>
       )}
+      
+      {/* Add styles for mobile toggle */}
+      <style>{`
+        @media (max-width: 768px) {
+          .mobile-toggle-btn {
+            display: flex !important;
+          }
+        }
+      `}</style>
     </div>
   )
 }
