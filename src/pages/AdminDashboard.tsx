@@ -72,17 +72,11 @@ function AdminDashboard() {
       <div style={{ background: 'white', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         <div style={{ padding: '16px', borderBottom: '1px solid #e5e7eb', fontWeight: 'bold' }}>Daily Sales Records</div>
         {dailySales.length === 0 ? (
-          <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
-            No sales data in the last 7 days
-          </div>
+          <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>No sales data in the last 7 days</div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead style={{ background: '#f9fafb' }}>
-              <tr>
-                <th style={{ padding: '12px', textAlign: 'left' }}>Date</th>
-                <th style={{ padding: '12px', textAlign: 'right' }}>Total Sales</th>
-                <th style={{ padding: '12px', textAlign: 'right' }}>Orders</th>
-              </tr>
+              <tr><th style={{ padding: '12px', textAlign: 'left' }}>Date</th><th style={{ padding: '12px', textAlign: 'right' }}>Total Sales</th><th style={{ padding: '12px', textAlign: 'right' }}>Orders</th></tr>
             </thead>
             <tbody>
               {dailySales.map((day, idx) => (
