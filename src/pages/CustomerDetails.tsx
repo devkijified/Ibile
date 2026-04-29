@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { useParams, useNavigate } from 'react-router-dom'
 import { toast, Toaster } from 'react-hot-toast'
 
-function CustomerDetails() {
-  const { id } = useParams()
-  const navigate = useNavigate()
+interface CustomerDetailsProps {
+  customerId: string
+  onBack: () => void
+}
+
+function CustomerDetails({ customerId, onBack }: CustomerDetailsProps) {
   const [customer, setCustomer] = useState<any>(null)
   const [invoices, setInvoices] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -16,7 +18,7 @@ function CustomerDetails() {
 
   useEffect(() => {
     fetchCustomerData()
-  }, [id])
+  }, [customerId])
 
   async function fetchCustomerData() {
     setLoading(true)
@@ -24,7 +26,7 @@ function CustomerDetails() {
     const { data: customerData } = await supabase
       .from('customers')
       .select('*')
-      .eq('id', id)
+      .eq('id', customerId)
       .single()
     
     setCustomer(customerData)
@@ -32,7 +34,7 @@ function CustomerDetails() {
     const { data: invoiceData } = await supabase
       .from('invoices')
       .select('*')
-      .eq('customer_id', id)
+      .eq('customer_id', customerId)
       .order('created_at', { ascending: false })
     
     setInvoices(invoiceData || [])
@@ -51,7 +53,7 @@ function CustomerDetails() {
     const { error } = await supabase
       .from('customers')
       .update({ outstanding_balance: newOutstanding })
-      .eq('id', id)
+      .eq('id', customerId)
     
     if (error) {
       toast.error('Error recording payment')
@@ -83,9 +85,7 @@ function CustomerDetails() {
   return (
     <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
       <Toaster />
-      <button onClick={() => navigate(-1)} style={{ marginBottom: '20px', background: '#e5e7eb', padding: '8px 16px', borderRadius: '6px', border: 'none', cursor: 'pointer' }}>
-        ← Back
-      </button>
+      <button onClick={onBack} style={{ marginBottom: '20px', background: '#e5e7eb', padding: '8px 16px', borderRadius: '6px', border: 'none', cursor: 'pointer' }}>← Back to Dashboard</button>
 
       {/* Customer Header */}
       <div style={{ background: 'white', borderRadius: '12px', padding: '20px', marginBottom: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
@@ -115,14 +115,18 @@ function CustomerDetails() {
       {/* Monthly Breakdown */}
       <div style={{ background: 'white', borderRadius: '12px', padding: '20px', marginBottom: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '16px' }}>Monthly Spending</h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {Object.entries(monthlyData).map(([month, data]: [string, any]) => (
-            <div key={month} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #e5e7eb' }}>
-              <span>{month}</span>
-              <span><strong>₦{data.total.toLocaleString()}</strong> ({data.count} orders)</span>
-            </div>
-          ))}
-        </div>
+        {Object.keys(monthlyData).length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280' }}>No spending data</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {Object.entries(monthlyData).map(([month, data]: [string, any]) => (
+              <div key={month} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #e5e7eb' }}>
+                <span>{month}</span>
+                <span><strong>₦{data.total.toLocaleString()}</strong> ({data.count} orders)</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Purchase History */}
@@ -179,16 +183,13 @@ function CustomerDetails() {
             
             <div style={{ marginBottom: '16px', padding: '12px', background: '#f9fafb', borderRadius: '8px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ fontSize: '12px', color: '#6b7280' }}>Invoice #</span>
-                <span style={{ fontWeight: 'bold' }}>{selectedInvoice.invoice_number}</span>
+                <span>Invoice #</span><span style={{ fontWeight: 'bold' }}>{selectedInvoice.invoice_number}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ fontSize: '12px', color: '#6b7280' }}>Date</span>
-                <span>{new Date(selectedInvoice.created_at).toLocaleString()}</span>
+                <span>Date</span><span>{new Date(selectedInvoice.created_at).toLocaleString()}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '12px', color: '#6b7280' }}>Payment Method</span>
-                <span style={{ color: selectedInvoice.payment_method === 'outstanding' ? '#ef4444' : '#22c55e', fontWeight: 'bold' }}>{selectedInvoice.payment_method}</span>
+                <span>Payment Method</span><span style={{ color: selectedInvoice.payment_method === 'outstanding' ? '#ef4444' : '#22c55e' }}>{selectedInvoice.payment_method}</span>
               </div>
             </div>
 
@@ -218,14 +219,7 @@ function CustomerDetails() {
             <h2 className="modal-title">Record Payment</h2>
             <p>Customer: <strong>{customer.name}</strong></p>
             <p>Outstanding: <strong style={{ color: '#ef4444' }}>₦{(customer.outstanding_balance || 0).toLocaleString()}</strong></p>
-            <input
-              type="number"
-              placeholder="Payment Amount (₦)"
-              value={paymentAmount}
-              onChange={(e) => setPaymentAmount(e.target.value)}
-              style={{ width: '100%', padding: '10px', margin: '12px 0', border: '1px solid #ccc', borderRadius: '6px' }}
-              autoFocus
-            />
+            <input type="number" placeholder="Payment Amount (₦)" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} style={{ width: '100%', padding: '10px', margin: '12px 0', border: '1px solid #ccc', borderRadius: '6px' }} autoFocus />
             <div style={{ display: 'flex', gap: '12px' }}>
               <button onClick={recordPayment} style={{ flex: 1, background: '#22c55e', color: 'white', padding: '10px', borderRadius: '6px', border: 'none', cursor: 'pointer' }}>Record</button>
               <button onClick={() => setShowPaymentModal(false)} style={{ flex: 1, background: '#e5e7eb', padding: '10px', borderRadius: '6px', border: 'none', cursor: 'pointer' }}>Cancel</button>
