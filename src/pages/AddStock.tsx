@@ -7,6 +7,9 @@ function AddStock() {
   const [selectedProduct, setSelectedProduct] = useState<any>(null)
   const [quantity, setQuantity] = useState('')
   const [unitCost, setUnitCost] = useState('')
+  const [totalCostAmount, setTotalCostAmount] = useState('')
+  const [useTotalCost, setUseTotalCost] = useState(false)
+  const [supplierInvoice, setSupplierInvoice] = useState('')
   const [notes, setNotes] = useState('')
   const [loading, setLoading] = useState(false)
   const [transactions, setTransactions] = useState<any[]>([])
@@ -17,7 +20,7 @@ function AddStock() {
   }, [])
 
   async function fetchProducts() {
-    const { data } = await supabase.from('products').select('id, name, stock, current_cost').order('name')
+    const { data } = await supabase.from('products').select('id, name, stock, current_cost, price').order('name')
     setProducts(data || [])
   }
 
@@ -28,6 +31,33 @@ function AddStock() {
       .order('created_at', { ascending: false })
       .limit(20)
     setTransactions(data || [])
+  }
+
+  const handleTotalCostChange = (value: string) => {
+    setTotalCostAmount(value)
+    if (quantity && value && parseFloat(value) > 0 && parseInt(quantity) > 0) {
+      const calculatedUnitCost = parseFloat(value) / parseInt(quantity)
+      setUnitCost(calculatedUnitCost.toFixed(2))
+    }
+  }
+
+  const handleUnitCostChange = (value: string) => {
+    setUnitCost(value)
+    if (quantity && value && parseFloat(value) > 0 && parseInt(quantity) > 0) {
+      const calculatedTotal = parseFloat(value) * parseInt(quantity)
+      setTotalCostAmount(calculatedTotal.toFixed(2))
+    }
+  }
+
+  const handleQuantityChange = (value: string) => {
+    setQuantity(value)
+    if (unitCost && value && parseFloat(unitCost) > 0 && parseInt(value) > 0) {
+      const calculatedTotal = parseFloat(unitCost) * parseInt(value)
+      setTotalCostAmount(calculatedTotal.toFixed(2))
+    } else if (totalCostAmount && value && parseFloat(totalCostAmount) > 0 && parseInt(value) > 0) {
+      const calculatedUnitCost = parseFloat(totalCostAmount) / parseInt(value)
+      setUnitCost(calculatedUnitCost.toFixed(2))
+    }
   }
 
   async function addStock() {
@@ -50,7 +80,23 @@ function AddStock() {
 
     setLoading(true)
 
-    const { error } = await supabase
+    // Get current product data to calculate new weighted average
+    const { data: currentProduct } = await supabase
+      .from('products')
+      .select('stock, current_cost, total_investment')
+      .eq('id', selectedProduct.id)
+      .single()
+
+    const currentStock = currentProduct?.stock || 0
+    const currentAvgCost = currentProduct?.current_cost || 0
+    const currentInvestment = currentProduct?.total_investment || 0
+
+    const newTotalInvestment = currentInvestment + totalCost
+    const newStock = currentStock + qty
+    const newAvgCost = newTotalInvestment / newStock
+
+    // Insert transaction
+    const { error: transactionError } = await supabase
       .from('inventory_transactions')
       .insert([{
         product_id: selectedProduct.id,
@@ -58,19 +104,40 @@ function AddStock() {
         unit_cost: cost,
         total_cost: totalCost,
         transaction_type: 'purchase',
+        supplier_invoice_number: supplierInvoice || null,
         notes: notes || null
       }])
 
-    if (error) {
-      toast.error(error.message)
+    if (transactionError) {
+      toast.error(transactionError.message)
+      setLoading(false)
+      return
+    }
+
+    // Update product stock and cost
+    const { error: updateError } = await supabase
+      .from('products')
+      .update({
+        stock: newStock,
+        current_cost: newAvgCost,
+        total_investment: newTotalInvestment
+      })
+      .eq('id', selectedProduct.id)
+
+    if (updateError) {
+      toast.error(updateError.message)
     } else {
       toast.success(`Added ${qty} ${selectedProduct.name}`)
       setQuantity('')
       setUnitCost('')
+      setTotalCostAmount('')
+      setSupplierInvoice('')
       setNotes('')
+      setUseTotalCost(false)
       fetchProducts()
       fetchTransactions()
       
+      // Refresh selected product
       const { data } = await supabase
         .from('products')
         .select('*')
@@ -92,6 +159,19 @@ function AddStock() {
     return newTotal / newStock
   }
 
+  const expectedProfit = () => {
+    if (!selectedProduct || !unitCost) return null
+    const sellingPrice = selectedProduct.price || 0
+    const costPrice = parseFloat(unitCost)
+    const profitPerUnit = sellingPrice - costPrice
+    const profitMargin = (profitPerUnit / sellingPrice) * 100
+    const totalProfit = profitPerUnit * (parseInt(quantity) || 0)
+    return { profitPerUnit, profitMargin, totalProfit }
+  }
+
+  const profit = expectedProfit()
+  const newAvgCost = calculateNewAvgCost()
+
   return (
     <div style={{ maxWidth: '800px', margin: '0 auto' }}>
       <Toaster position="top-right" />
@@ -106,24 +186,57 @@ function AddStock() {
           <option value="">Select Product</option>
           {products.map(p => (
             <option key={p.id} value={p.id}>
-              {p.name} | Stock: {p.stock} | Avg Cost: ₦{(p.current_cost || 0).toLocaleString()}
+              {p.name} | Selling: ₦{p.price?.toLocaleString()} | Stock: {p.stock} | Current Cost: ₦{(p.current_cost || 0).toLocaleString()}
             </option>
           ))}
         </select>
 
-        <input
-          type="number"
-          placeholder="Quantity (pieces)"
-          value={quantity}
-          onChange={(e) => setQuantity(e.target.value)}
-          style={{ width: '100%', padding: '12px', marginBottom: '16px', border: '1px solid #ccc', borderRadius: '8px' }}
-        />
+        <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+          <input
+            type="number"
+            placeholder="Quantity (pieces)"
+            value={quantity}
+            onChange={(e) => handleQuantityChange(e.target.value)}
+            style={{ flex: 2, padding: '12px', border: '1px solid #ccc', borderRadius: '8px' }}
+          />
+          <button
+            onClick={() => setUseTotalCost(!useTotalCost)}
+            style={{
+              padding: '12px 16px',
+              background: useTotalCost ? '#22c55e' : '#e5e7eb',
+              color: useTotalCost ? 'white' : '#4b5563',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer'
+            }}
+          >
+            {useTotalCost ? 'Using Total Cost' : 'Use Total Cost'}
+          </button>
+        </div>
+
+        {useTotalCost ? (
+          <input
+            type="number"
+            placeholder="Total Cost from Supplier (₦)"
+            value={totalCostAmount}
+            onChange={(e) => handleTotalCostChange(e.target.value)}
+            style={{ width: '100%', padding: '12px', marginBottom: '16px', border: '1px solid #ccc', borderRadius: '8px' }}
+          />
+        ) : (
+          <input
+            type="number"
+            placeholder="Unit Cost (₦ per piece)"
+            value={unitCost}
+            onChange={(e) => handleUnitCostChange(e.target.value)}
+            style={{ width: '100%', padding: '12px', marginBottom: '16px', border: '1px solid #ccc', borderRadius: '8px' }}
+          />
+        )}
 
         <input
-          type="number"
-          placeholder="Unit Cost (₦ per piece)"
-          value={unitCost}
-          onChange={(e) => setUnitCost(e.target.value)}
+          type="text"
+          placeholder="Supplier Invoice Number (optional)"
+          value={supplierInvoice}
+          onChange={(e) => setSupplierInvoice(e.target.value)}
           style={{ width: '100%', padding: '12px', marginBottom: '16px', border: '1px solid #ccc', borderRadius: '8px' }}
         />
 
@@ -137,14 +250,28 @@ function AddStock() {
 
         {selectedProduct && quantity && unitCost && (
           <div style={{ background: '#f0fdf4', padding: '16px', borderRadius: '8px', marginBottom: '20px' }}>
-            <h4 style={{ fontWeight: 'bold', marginBottom: '12px' }}>Preview</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '13px' }}>
+            <h4 style={{ fontWeight: 'bold', marginBottom: '12px' }}>📊 Preview</h4>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '13px', marginBottom: '12px' }}>
               <span>Current Stock:</span><span><strong>{selectedProduct.stock}</strong> pieces</span>
               <span>Current Avg Cost:</span><span><strong>₦{(selectedProduct.current_cost || 0).toLocaleString()}</strong></span>
               <span>New Stock:</span><span><strong style={{ color: '#22c55e' }}>{selectedProduct.stock + parseInt(quantity)}</strong> pieces</span>
-              <span>New Avg Cost:</span><span><strong style={{ color: '#22c55e' }}>₦{calculateNewAvgCost()?.toLocaleString()}</strong></span>
+              <span>New Avg Cost:</span><span><strong style={{ color: '#22c55e' }}>₦{newAvgCost?.toLocaleString()}</strong></span>
               <span>Total Investment:</span><span><strong>₦{((selectedProduct.current_cost || 0) * selectedProduct.stock + (parseInt(quantity) * parseFloat(unitCost))).toLocaleString()}</strong></span>
             </div>
+            
+            {profit && (
+              <div style={{ background: '#e0f2fe', padding: '12px', borderRadius: '8px' }}>
+                <h5 style={{ fontWeight: 'bold', marginBottom: '8px', fontSize: '12px' }}>💰 Expected Profit (when sold at current price)</h5>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '12px' }}>
+                  <span>Profit per unit:</span>
+                  <span><strong style={{ color: '#22c55e' }}>₦{profit.profitPerUnit.toLocaleString()}</strong></span>
+                  <span>Profit Margin:</span>
+                  <span><strong style={{ color: '#22c55e' }}>{profit.profitMargin.toFixed(1)}%</strong></span>
+                  <span>Total Expected Profit:</span>
+                  <span><strong style={{ color: '#22c55e', fontSize: '14px' }}>₦{profit.totalProfit.toLocaleString()}</strong></span>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -168,6 +295,7 @@ function AddStock() {
                 <div style={{ fontWeight: 'bold' }}>{t.products?.name}</div>
                 <div style={{ fontSize: '13px' }}>
                   +{t.quantity} units @ ₦{t.unit_cost.toLocaleString()} = ₦{t.total_cost.toLocaleString()}
+                  {t.supplier_invoice_number && <span style={{ marginLeft: '8px', color: '#6b7280' }}>| Invoice: {t.supplier_invoice_number}</span>}
                 </div>
                 <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '4px' }}>
                   {new Date(t.created_at).toLocaleString()}
