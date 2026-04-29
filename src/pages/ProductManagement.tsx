@@ -11,6 +11,7 @@ function ProductManagement() {
   const [formData, setFormData] = useState({
     name: '',
     price: '',
+    cost_price: '',
     stock: '',
     category: ''
   })
@@ -28,17 +29,22 @@ function ProductManagement() {
 
   async function saveProduct() {
     if (!formData.name || !formData.price) {
-      toast.error('Name and price required')
+      toast.error('Name and selling price required')
       return
     }
 
+    const sellingPrice = parseFloat(formData.price)
+    const costPrice = formData.cost_price ? parseFloat(formData.cost_price) : sellingPrice * 0.6
+    const currentStock = parseInt(formData.stock) || 0
+
     const productData = {
       name: formData.name,
-      price: parseFloat(formData.price),
-      stock: parseInt(formData.stock) || 0,
+      price: sellingPrice,
+      cost: costPrice,
+      current_cost: costPrice,
+      stock: currentStock,
       category: formData.category || 'BEERS',
-      current_cost: parseFloat(formData.price) * 0.6,
-      total_investment: (parseInt(formData.stock) || 0) * (parseFloat(formData.price) * 0.6)
+      total_investment: currentStock * costPrice
     }
 
     let error
@@ -62,13 +68,13 @@ function ProductManagement() {
       toast.success(editingProduct ? 'Product updated' : 'Product created')
       setShowModal(false)
       setEditingProduct(null)
-      setFormData({ name: '', price: '', stock: '', category: '' })
+      setFormData({ name: '', price: '', cost_price: '', stock: '', category: '' })
       fetchProducts()
     }
   }
 
   async function deleteProduct(id: string, name: string) {
-    if (confirm(`Delete ${name}?`)) {
+    if (confirm(`Delete ${name}? This will remove it from inventory.`)) {
       const { error } = await supabase.from('products').delete().eq('id', id)
       if (error) {
         toast.error(error.message)
@@ -84,6 +90,16 @@ function ProductManagement() {
   )
 
   const categories = ['BEERS', 'SPIRITS&WINES', 'SOFT DRINKS', 'GRILLS', 'MEATS', 'SOUPS']
+
+  const expectedProfit = (selling: number, cost: number) => {
+    if (!selling || !cost) return 0
+    return selling - cost
+  }
+
+  const profitMargin = (selling: number, cost: number) => {
+    if (!selling || !cost) return 0
+    return ((selling - cost) / selling) * 100
+  }
 
   return (
     <div>
@@ -101,7 +117,7 @@ function ProductManagement() {
           <button
             onClick={() => {
               setEditingProduct(null)
-              setFormData({ name: '', price: '', stock: '', category: '' })
+              setFormData({ name: '', price: '', cost_price: '', stock: '', category: '' })
               setShowModal(true)
             }}
             style={{ background: '#22c55e', color: 'white', padding: '8px 16px', borderRadius: '6px', border: 'none', cursor: 'pointer' }}
@@ -115,48 +131,63 @@ function ProductManagement() {
         <div style={{ textAlign: 'center', padding: '40px' }}>Loading products...</div>
       ) : (
         <div style={{ background: 'white', borderRadius: '12px', overflow: 'auto', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}>
             <thead style={{ background: '#f9fafb' }}>
               <tr>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Name</th>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Category</th>
-                <th style={{ padding: '12px', textAlign: 'right' }}>Price</th>
+                <th style={{ padding: '12px', textAlign: 'right' }}>Selling Price</th>
+                <th style={{ padding: '12px', textAlign: 'right' }}>Cost Price</th>
+                <th style={{ padding: '12px', textAlign: 'right' }}>Profit</th>
                 <th style={{ padding: '12px', textAlign: 'right' }}>Stock</th>
                 <th style={{ padding: '12px', textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredProducts.map(product => (
-                <tr key={product.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                  <td style={{ padding: '12px' }}>{product.name}</td>
-                  <td style={{ padding: '12px' }}>{product.category}</td>
-                  <td style={{ padding: '12px', textAlign: 'right' }}>₦{product.price.toLocaleString()}</td>
-                  <td style={{ padding: '12px', textAlign: 'right', color: product.stock <= 12 ? '#ef4444' : '#1f2937' }}>{product.stock}</td>
-                  <td style={{ padding: '12px', textAlign: 'right' }}>
-                    <button
-                      onClick={() => {
-                        setEditingProduct(product)
-                        setFormData({
-                          name: product.name,
-                          price: product.price.toString(),
-                          stock: product.stock.toString(),
-                          category: product.category || ''
-                        })
-                        setShowModal(true)
-                      }}
-                      style={{ background: '#3b82f6', color: 'white', padding: '4px 12px', borderRadius: '4px', border: 'none', cursor: 'pointer', marginRight: '8px' }}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => deleteProduct(product.id, product.name)}
-                      style={{ background: '#ef4444', color: 'white', padding: '4px 12px', borderRadius: '4px', border: 'none', cursor: 'pointer' }}
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {filteredProducts.map(product => {
+                const profit = expectedProfit(product.price, product.cost || product.current_cost)
+                const margin = profitMargin(product.price, product.cost || product.current_cost)
+                return (
+                  <tr key={product.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                    <td style={{ padding: '12px' }}>{product.name}</td>
+                    <td style={{ padding: '12px' }}>{product.category}</td>
+                    <td style={{ padding: '12px', textAlign: 'right' }}>₦{product.price.toLocaleString()}Js
+                    <td style={{ padding: '12px', textAlign: 'right', color: '#6b7280' }}>₦{(product.cost || product.current_cost || 0).toLocaleString()}Js
+                    <td style={{ padding: '12px', textAlign: 'right' }}>
+                      <span style={{ color: profit > 0 ? '#22c55e' : '#ef4444', fontWeight: 'bold' }}>
+                        ₦{profit.toLocaleString()} ({margin.toFixed(0)}%)
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px', textAlign: 'right', color: product.stock <= 12 ? '#ef4444' : '#1f2937', fontWeight: 'bold' }}>
+                      {product.stock}
+                    </td>
+                    <td style={{ padding: '12px', textAlign: 'right' }}>
+                      <button
+                        onClick={() => {
+                          setEditingProduct(product)
+                          setFormData({
+                            name: product.name,
+                            price: product.price.toString(),
+                            cost_price: (product.cost || product.current_cost || 0).toString(),
+                            stock: product.stock.toString(),
+                            category: product.category || ''
+                          })
+                          setShowModal(true)
+                        }}
+                        style={{ background: '#3b82f6', color: 'white', padding: '4px 12px', borderRadius: '4px', border: 'none', cursor: 'pointer', marginRight: '8px' }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => deleteProduct(product.id, product.name)}
+                        style={{ background: '#ef4444', color: 'white', padding: '4px 12px', borderRadius: '4px', border: 'none', cursor: 'pointer' }}
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -164,37 +195,62 @@ function ProductManagement() {
 
       {showModal && (
         <div className="modal-overlay">
-          <div className="modal" style={{ width: '400px' }}>
+          <div className="modal" style={{ width: '450px' }}>
             <h2 className="modal-title">{editingProduct ? 'Edit Product' : 'New Product'}</h2>
             <input
               type="text"
-              placeholder="Product Name"
+              placeholder="Product Name *"
               value={formData.name}
               onChange={(e) => setFormData({...formData, name: e.target.value})}
               style={{ width: '100%', padding: '10px', marginBottom: '12px', border: '1px solid #ccc', borderRadius: '6px' }}
             />
-            <input
-              type="number"
-              placeholder="Price (₦)"
-              value={formData.price}
-              onChange={(e) => setFormData({...formData, price: e.target.value})}
-              style={{ width: '100%', padding: '10px', marginBottom: '12px', border: '1px solid #ccc', borderRadius: '6px' }}
-            />
-            <input
-              type="number"
-              placeholder="Stock Quantity"
-              value={formData.stock}
-              onChange={(e) => setFormData({...formData, stock: e.target.value})}
-              style={{ width: '100%', padding: '10px', marginBottom: '12px', border: '1px solid #ccc', borderRadius: '6px' }}
-            />
-            <select
-              value={formData.category}
-              onChange={(e) => setFormData({...formData, category: e.target.value})}
-              style={{ width: '100%', padding: '10px', marginBottom: '16px', border: '1px solid #ccc', borderRadius: '6px' }}
-            >
-              <option value="">Select Category</option>
-              {categories.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+            <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+              <input
+                type="number"
+                placeholder="Selling Price (₦) *"
+                value={formData.price}
+                onChange={(e) => setFormData({...formData, price: e.target.value})}
+                style={{ flex: 1, padding: '10px', border: '1px solid #ccc', borderRadius: '6px' }}
+              />
+              <input
+                type="number"
+                placeholder="Cost Price (₦)"
+                value={formData.cost_price}
+                onChange={(e) => setFormData({...formData, cost_price: e.target.value})}
+                style={{ flex: 1, padding: '10px', border: '1px solid #ccc', borderRadius: '6px' }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+              <input
+                type="number"
+                placeholder="Initial Stock"
+                value={formData.stock}
+                onChange={(e) => setFormData({...formData, stock: e.target.value})}
+                style={{ flex: 1, padding: '10px', border: '1px solid #ccc', borderRadius: '6px' }}
+              />
+              <select
+                value={formData.category}
+                onChange={(e) => setFormData({...formData, category: e.target.value})}
+                style={{ flex: 1, padding: '10px', border: '1px solid #ccc', borderRadius: '6px' }}
+              >
+                <option value="">Category</option>
+                {categories.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            
+            {formData.price && formData.cost_price && (
+              <div style={{ background: '#f0fdf4', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
+                <div style={{ fontSize: '12px', display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <span>Expected Profit per unit:</span>
+                  <strong style={{ color: '#22c55e' }}>₦{expectedProfit(parseFloat(formData.price), parseFloat(formData.cost_price)).toLocaleString()}</strong>
+                </div>
+                <div style={{ fontSize: '12px', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Profit Margin:</span>
+                  <strong style={{ color: '#22c55e' }}>{profitMargin(parseFloat(formData.price), parseFloat(formData.cost_price)).toFixed(1)}%</strong>
+                </div>
+              </div>
+            )}
+            
             <div style={{ display: 'flex', gap: '12px' }}>
               <button onClick={saveProduct} style={{ flex: 1, background: '#22c55e', color: 'white', padding: '10px', borderRadius: '6px', border: 'none', cursor: 'pointer' }}>Save</button>
               <button onClick={() => setShowModal(false)} style={{ flex: 1, background: '#e5e7eb', padding: '10px', borderRadius: '6px', border: 'none', cursor: 'pointer' }}>Cancel</button>
