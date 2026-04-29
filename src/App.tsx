@@ -1,20 +1,21 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './lib/supabase'
 import Login from './pages/Login'
-import CustomerDetails from './pages/CustomerDetails'
 import POS from './pages/POS'
 import Customers from './pages/Customers'
 import AdminPanel from './pages/AdminPanel'
+import CustomerDetails from './pages/CustomerDetails'
 import { Toaster } from 'react-hot-toast'
 
 function App() {
   const [session, setSession] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [currentView, setCurrentView] = useState<'pos' | 'customers' | 'admin'>('pos')
+  const [currentView, setCurrentView] = useState<'pos' | 'customers' | 'admin' | 'customer-details'>('pos')
   const [isAdmin, setIsAdmin] = useState(false)
   const [showAdminPrompt, setShowAdminPrompt] = useState(false)
   const [adminPassword, setAdminPassword] = useState('')
   const [userName, setUserName] = useState('')
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -47,6 +48,11 @@ function App() {
       alert('Invalid admin password')
       setAdminPassword('')
     }
+  }
+
+  const handleViewCustomer = (customerId: string) => {
+    setSelectedCustomerId(customerId)
+    setCurrentView('customer-details')
   }
 
   if (loading) {
@@ -190,17 +196,20 @@ function App() {
       {/* Content */}
       <div>
         {currentView === 'pos' && <POS isAdmin={isAdmin} userName={userName} />}
-        {currentView === 'customers' && isAdmin && <Customers />}
+        {currentView === 'customers' && isAdmin && <Customers onViewCustomer={handleViewCustomer} />}
         {currentView === 'customers' && !isAdmin && (
           <div style={{ textAlign: 'center', padding: '60px 20px' }}>
             <p>Admin access required. Click "Admin Login" and enter password.</p>
           </div>
         )}
-        {currentView === 'admin' && isAdmin && <AdminPanel />}
+        {currentView === 'admin' && isAdmin && <AdminPanel onViewCustomer={handleViewCustomer} />}
         {currentView === 'admin' && !isAdmin && (
           <div style={{ textAlign: 'center', padding: '60px 20px' }}>
             <p>Admin access required. Click "Admin Login" and enter password.</p>
           </div>
+        )}
+        {currentView === 'customer-details' && selectedCustomerId && (
+          <CustomerDetails customerId={selectedCustomerId} onBack={() => setCurrentView('admin')} />
         )}
       </div>
     </div>
