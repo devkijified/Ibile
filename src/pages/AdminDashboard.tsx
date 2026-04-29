@@ -12,9 +12,20 @@ interface InvoiceDetail {
   id: string
   invoice_number: string
   customer_name: string
+  customer_id: string
   total: number
   payment_method: string
   created_at: string
+  items: any[]
+  tab_status: string
+}
+
+interface CustomerPurchase {
+  invoice_number: string
+  date: string
+  total: number
+  payment_method: string
+  status: string
   items: any[]
 }
 
@@ -27,8 +38,12 @@ function AdminDashboard() {
   const [topCustomers, setTopCustomers] = useState<any[]>([])
   const [expandedDate, setExpandedDate] = useState<string | null>(null)
   const [expandedInvoice, setExpandedInvoice] = useState<string | null>(null)
+  const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null)
   const [invoicesByDate, setInvoicesByDate] = useState<{ [key: string]: InvoiceDetail[] }>({})
+  const [customerPurchases, setCustomerPurchases] = useState<{ [key: string]: CustomerPurchase[] }>({})
+  const [customerTotals, setCustomerTotals] = useState<{ [key: string]: { total: number; outstanding: number } }>({})
   const [showAllLowStock, setShowAllLowStock] = useState(false)
+  const [selectedCustomerDetails, setSelectedCustomerDetails] = useState<any>(null)
 
   useEffect(() => {
     fetchAllData()
@@ -85,7 +100,7 @@ function AdminDashboard() {
         salesByDate[date].total_sales += invoice.total
         salesByDate[date].invoice_count += 1
         
-        if (invoice.payment_method === 'outstanding') {
+        if (invoice.payment_method === 'outstanding' || invoice.tab_status === 'outstanding') {
           salesByDate[date].outstanding += invoice.total
         }
         
@@ -93,10 +108,12 @@ function AdminDashboard() {
           id: invoice.id,
           invoice_number: invoice.invoice_number,
           customer_name: invoice.customer_name,
+          customer_id: invoice.customer_id,
           total: invoice.total,
           payment_method: invoice.payment_method,
           created_at: invoice.created_at,
-          items: invoice.items
+          items: invoice.items,
+          tab_status: invoice.tab_status
         })
       })
 
@@ -124,7 +141,7 @@ function AdminDashboard() {
       
       const { data } = await supabase
         .from('invoices')
-        .select('customer_name, total')
+        .select('customer_name, customer_id, total')
         .gte('created_at', startDate.toISOString())
         .lt('created_at', endDate.toISOString())
         .limit(100)
@@ -136,7 +153,11 @@ function AdminDashboard() {
           if (existing) {
             existing.total += inv.total
           } else {
-            customerMap.set(inv.customer_name, { name: inv.customer_name, total: inv.total })
+            customerMap.set(inv.customer_name, { 
+              name: inv.customer_name, 
+              customer_id: inv.customer_id,
+              total: inv.total 
+            })
           }
         })
         
@@ -161,7 +182,7 @@ function AdminDashboard() {
       
       const { data } = await supabase
         .from('invoices')
-        .select('customer_name, total')
+        .select('customer_name, customer_id, total')
         .gte('created_at', sevenDaysAgo.toISOString())
         .limit(500)
       
@@ -172,7 +193,11 @@ function AdminDashboard() {
           if (existing) {
             existing.total += inv.total
           } else {
-            customerMap.set(inv.customer_name, { name: inv.customer_name, total: inv.total })
+            customerMap.set(inv.customer_name, { 
+              name: inv.customer_name, 
+              customer_id: inv.customer_id,
+              total: inv.total 
+            })
           }
         })
         
@@ -185,6 +210,58 @@ function AdminDashboard() {
       }
     } catch (err) {
       console.error('Error fetching top customers:', err)
+    }
+  }
+
+  async function fetchCustomerPurchaseHistory(customerName: string, customerId: string) {
+    if (customerPurchases[customerName]) {
+      setExpandedCustomer(expandedCustomer === customerName ? null : customerName)
+      return
+    }
+
+    let query = supabase
+      .from('invoices')
+      .select('*')
+      .eq('customer_name', customerName)
+      .order('created_at', { ascending: false })
+      .limit(50)
+
+    if (customerId && customerId !== 'walk-in') {
+      query = supabase
+        .from('invoices')
+        .select('*')
+        .eq('customer_id', customerId)
+        .order('created_at', { ascending: false })
+        .limit(50)
+    }
+    
+    const { data } = await query
+    
+    if (data && data.length > 0) {
+      const purchases: CustomerPurchase[] = data.map(inv => ({
+        invoice_number: inv.invoice_number,
+        date: new Date(inv.created_at).toLocaleDateString('en-NG'),
+        total: inv.total,
+        payment_method: inv.payment_method,
+        status: inv.tab_status || (inv.payment_method === 'outstanding' ? 'outstanding' : 'paid'),
+        items: inv.items
+      }))
+      
+      const totalSpent = purchases.reduce((sum, p) => sum + p.total, 0)
+      const totalOutstanding = purchases
+        .filter(p => p.status === 'outstanding')
+        .reduce((sum, p) => sum + p.total, 0)
+      
+      setCustomerPurchases(prev => ({ ...prev, [customerName]: purchases }))
+      setCustomerTotals(prev => ({ 
+        ...prev, 
+        [customerName]: { total: totalSpent, outstanding: totalOutstanding } 
+      }))
+      setSelectedCustomerDetails({ name: customerName, id: customerId })
+      setExpandedCustomer(customerName)
+    } else {
+      setCustomerPurchases(prev => ({ ...prev, [customerName]: [] }))
+      setExpandedCustomer(customerName)
     }
   }
 
@@ -243,7 +320,7 @@ function AdminDashboard() {
 
   return (
     <div style={{ padding: '12px', maxWidth: '1200px', margin: '0 auto' }}>
-      {/* Stats Cards - Responsive Grid */}
+      {/* Stats Cards */}
       <div style={{ 
         display: 'grid', 
         gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', 
@@ -264,7 +341,7 @@ function AdminDashboard() {
         </div>
       </div>
 
-      {/* Top Customers Section - Mobile Friendly */}
+      {/* Top Customers Section - Clickable */}
       <div style={{ background: 'white', borderRadius: '12px', padding: '16px', marginBottom: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         <h3 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '12px' }}>🏆 Top Customers (Min ₦50K / 7 days)</h3>
         {topCustomers.length === 0 ? (
@@ -274,35 +351,100 @@ function AdminDashboard() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {topCustomers.map((customer, idx) => (
-              <div key={idx} style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center',
-                padding: '10px',
-                background: idx < 3 ? '#fef3c7' : '#f9fafb',
-                borderRadius: '8px'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '16px' }}>
-                    {idx === 0 && '🥇'}
-                    {idx === 1 && '🥈'}
-                    {idx === 2 && '🥉'}
-                    {idx > 2 && `${idx + 1}.`}
+              <div key={idx}>
+                <button
+                  onClick={() => fetchCustomerPurchaseHistory(customer.name, customer.customer_id)}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '10px',
+                    background: idx < 3 ? '#fef3c7' : '#f9fafb',
+                    borderRadius: '8px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    textAlign: 'left'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '16px' }}>
+                      {idx === 0 && '🥇'}
+                      {idx === 1 && '🥈'}
+                      {idx === 2 && '🥉'}
+                      {idx > 2 && `${idx + 1}.`}
+                    </span>
+                    <span style={{ fontSize: '13px', fontWeight: idx < 3 ? 'bold' : 'normal' }}>
+                      {customer.name.length > 20 ? customer.name.substring(0, 18) + '...' : customer.name}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#22c55e' }}>
+                    ₦{(customer.total / 1000).toFixed(0)}k
                   </span>
-                  <span style={{ fontSize: '13px', fontWeight: idx < 3 ? 'bold' : 'normal' }}>
-                    {customer.name.length > 20 ? customer.name.substring(0, 18) + '...' : customer.name}
-                  </span>
-                </div>
-                <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#22c55e' }}>
-                  ₦{(customer.total / 1000).toFixed(0)}k
-                </span>
+                </button>
+                
+                {/* Customer Purchase History */}
+                {expandedCustomer === customer.name && customerPurchases[customer.name] && (
+                  <div style={{ marginTop: '8px', marginLeft: '24px', background: '#f9fafb', borderRadius: '8px', padding: '12px', border: '1px solid #e5e7eb' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                      <div>
+                        <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{customer.name}</div>
+                        <div style={{ fontSize: '11px', color: '#6b7280' }}>Purchase History</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '12px', color: '#22c55e' }}>Total: ₦{(customerTotals[customer.name]?.total || 0).toLocaleString()}</div>
+                        <div style={{ fontSize: '11px', color: '#ef4444' }}>Outstanding: ₦{(customerTotals[customer.name]?.outstanding || 0).toLocaleString()}</div>
+                      </div>
+                    </div>
+                    
+                    {customerPurchases[customer.name].length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280', fontSize: '12px' }}>
+                        No purchase history found
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '300px', overflowY: 'auto' }}>
+                        {customerPurchases[customer.name].map((purchase, idx) => (
+                          <div key={idx} style={{ background: 'white', borderRadius: '8px', padding: '10px', border: '1px solid #e5e7eb' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                              <div>
+                                <div style={{ fontWeight: 'bold', fontSize: '12px' }}>{purchase.invoice_number}</div>
+                                <div style={{ fontSize: '10px', color: '#6b7280' }}>{purchase.date}</div>
+                              </div>
+                              <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontWeight: 'bold', fontSize: '13px', color: '#22c55e' }}>₦{purchase.total.toLocaleString()}</div>
+                                <div style={{ fontSize: '9px', color: purchase.status === 'outstanding' ? '#ef4444' : '#6b7280' }}>
+                                  {purchase.payment_method} {purchase.status === 'outstanding' && '(Outstanding)'}
+                                </div>
+                              </div>
+                            </div>
+                            {purchase.items && purchase.items.length > 0 && (
+                              <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: '1px solid #e5e7eb' }}>
+                                <div style={{ fontSize: '10px', color: '#6b7280' }}>Items:</div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
+                                  {purchase.items.slice(0, 3).map((item, itemIdx) => (
+                                    <span key={itemIdx} style={{ fontSize: '10px', background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px' }}>
+                                      {item.name} x{item.quantity}
+                                    </span>
+                                  ))}
+                                  {purchase.items.length > 3 && (
+                                    <span style={{ fontSize: '10px', color: '#6b7280' }}>+{purchase.items.length - 3} more</span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
         )}
       </div>
 
-      {/* Date Cards - Mobile Friendly */}
+      {/* Date Cards - Sales Records */}
       <div style={{ marginBottom: '20px' }}>
         <h3 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '12px' }}>📅 Daily Sales Records</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -367,31 +509,13 @@ function AdminDashboard() {
                       </div>
                     </div>
                     
-                    {/* Customers for this day */}
-                    {selectedCustomers.length > 0 && selectedDate === day.date && (
-                      <div style={{ marginBottom: '12px' }}>
-                        <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '8px', color: '#4b5563' }}>Top Customers (Min ₦50K)</div>
-                        {selectedCustomers.map((customer, idx) => (
-                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: '12px', borderBottom: '1px solid #e5e7eb' }}>
-                            <span>{customer.name.length > 25 ? customer.name.substring(0, 22) + '...' : customer.name}</span>
-                            <span style={{ fontWeight: 'bold' }}>₦{customer.total.toLocaleString()}</span>
-                          </div>
-                        ))}
-                        {selectedCustomers.length === 0 && (
-                          <div style={{ fontSize: '12px', color: '#6b7280', textAlign: 'center', padding: '12px' }}>
-                            No customers with ₦50,000+ sales on this day
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    
                     {/* Invoice Records */}
                     <div style={{ marginTop: '12px' }}>
                       <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '8px', color: '#4b5563' }}>
                         📋 Invoice Records ({dayInvoices.length})
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {dayInvoices.slice(0, 5).map(invoice => (
+                        {dayInvoices.map(invoice => (
                           <div key={invoice.id} style={{ 
                             background: 'white', 
                             borderRadius: '8px', 
@@ -417,7 +541,7 @@ function AdminDashboard() {
                               <div>
                                 <div style={{ fontWeight: 'bold', fontSize: '12px' }}>{invoice.invoice_number}</div>
                                 <div style={{ fontSize: '10px', color: '#6b7280' }}>
-                                  {invoice.customer_name.length > 20 ? invoice.customer_name.substring(0, 18) + '...' : invoice.customer_name}
+                                  {invoice.customer_name.length > 25 ? invoice.customer_name.substring(0, 22) + '...' : invoice.customer_name}
                                 </div>
                               </div>
                               <div style={{ textAlign: 'right' }}>
@@ -447,11 +571,6 @@ function AdminDashboard() {
                             )}
                           </div>
                         ))}
-                        {dayInvoices.length > 5 && (
-                          <div style={{ textAlign: 'center', padding: '8px', fontSize: '11px', color: '#6b7280' }}>
-                            +{dayInvoices.length - 5} more orders
-                          </div>
-                        )}
                       </div>
                     </div>
                   </div>
@@ -462,7 +581,7 @@ function AdminDashboard() {
         </div>
       </div>
 
-      {/* Low Stock Alerts - Collapsible */}
+      {/* Low Stock Alerts */}
       {lowStockProducts.length > 0 && (
         <div style={{ background: '#fef3c7', borderLeft: '4px solid #f59e0b', padding: '16px', borderRadius: '8px', marginTop: '20px' }}>
           <h3 style={{ fontWeight: 'bold', marginBottom: '12px', fontSize: '13px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '8px' }}>
