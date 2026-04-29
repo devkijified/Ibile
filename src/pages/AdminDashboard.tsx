@@ -15,7 +15,11 @@ interface Invoice {
   tax: number
 }
 
-function AdminDashboard() {
+interface AdminDashboardProps {
+  onViewCustomer?: (customerId: string) => void
+}
+
+function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
   const [dailySales, setDailySales] = useState<any[]>([])
   const [lowStockProducts, setLowStockProducts] = useState<any[]>([])
   const [topCustomers, setTopCustomers] = useState<any[]>([])
@@ -375,8 +379,8 @@ function AdminDashboard() {
                               }}
                               onClick={(e) => {
                                 e.stopPropagation()
-                                if (invoice.customer_name !== 'Walk-in Customer' && invoice.customer_name) {
-                                  fetchCustomerPurchases(invoice.customer_name, invoice.customer_id)
+                                if (invoice.customer_name !== 'Walk-in Customer' && invoice.customer_id && onViewCustomer) {
+                                  onViewCustomer(invoice.customer_id)
                                 }
                               }}
                             >
