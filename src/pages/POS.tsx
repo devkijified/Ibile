@@ -24,6 +24,12 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
   const [customers, setCustomers] = useState<any[]>([])
   const [showCustomerModal, setShowCustomerModal] = useState(false)
+  const [customerSearch, setCustomerSearch] = useState('')
+  const [showAddCustomerForm, setShowAddCustomerForm] = useState(false)
+  const [newCustomerName, setNewCustomerName] = useState('')
+  const [newCustomerPhone, setNewCustomerPhone] = useState('')
+  const [newCustomerEmail, setNewCustomerEmail] = useState('')
+  const [addingCustomer, setAddingCustomer] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState('cash')
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('All')
@@ -77,6 +83,45 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
   async function fetchCustomers() {
     const { data } = await supabase.from('customers').select('*').order('name')
     setCustomers(data || [])
+  }
+
+  async function addNewCustomer() {
+    if (!newCustomerName.trim()) {
+      toast.error('Customer name is required')
+      return
+    }
+
+    setAddingCustomer(true)
+    
+    const { data, error } = await supabase
+      .from('customers')
+      .insert([{
+        name: newCustomerName.trim(),
+        phone: newCustomerPhone || null,
+        email: newCustomerEmail || null,
+        loyalty_points: 0,
+        total_spent: 0,
+        outstanding_balance: 0
+      }])
+      .select()
+      .single()
+
+    if (error) {
+      toast.error(error.message)
+    } else {
+      toast.success(`Customer "${newCustomerName}" added successfully`)
+      setCustomers(prev => [...prev, data])
+      setShowAddCustomerForm(false)
+      setNewCustomerName('')
+      setNewCustomerPhone('')
+      setNewCustomerEmail('')
+      setCustomerSearch('')
+      // Automatically select the new customer and create tab
+      createNewTab(data)
+      setShowCustomerModal(false)
+    }
+    
+    setAddingCustomer(false)
   }
 
   const createNewTab = (customer?: any) => {
@@ -219,6 +264,12 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
     return matchesSearch && matchesCategory
   })
 
+  // Filter customers based on search
+  const filteredCustomers = customers.filter(c => 
+    c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
+    (c.phone && c.phone.includes(customerSearch))
+  )
+
   return (
     <div>
       <Toaster position="top-right" />
@@ -237,6 +288,7 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
           {currentDate} | {currentTime}
         </div>
         <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+          <span>👤 {userName || 'Cashier'}</span>
           <button
             onClick={() => setShowVatToggle(!showVatToggle)}
             style={{
@@ -339,7 +391,11 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
               </button>
             </div>
           ))}
-          <button onClick={() => setShowCustomerModal(true)} style={{ padding: '12px 20px', color: '#22c55e', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>
+          <button onClick={() => {
+            setCustomerSearch('')
+            setShowAddCustomerForm(false)
+            setShowCustomerModal(true)
+          }} style={{ padding: '12px 20px', color: '#22c55e', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>
             + New Tab
           </button>
         </div>
@@ -470,28 +526,209 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
         </div>
       )}
 
-      {/* Customer Modal */}
+      {/* Customer Modal - Searchable with Add Customer */}
       {showCustomerModal && (
         <div className="modal-overlay">
-          <div className="modal">
-            <h2 className="modal-title">Select Customer</h2>
+          <div className="modal" style={{ width: '400px', maxHeight: '80vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <h2 className="modal-title" style={{ marginBottom: '16px' }}>Select Customer</h2>
+            
+            {/* Search Input */}
+            <input
+              type="text"
+              placeholder="🔍 Search customer by name or phone..."
+              value={customerSearch}
+              onChange={(e) => setCustomerSearch(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                border: '1px solid #d1d5db',
+                borderRadius: '8px',
+                fontSize: '14px',
+                marginBottom: '16px'
+              }}
+              autoFocus
+            />
+            
+            {/* Customer List */}
+            {!showAddCustomerForm ? (
+              <>
+                <div style={{ flex: 1, overflowY: 'auto', maxHeight: '300px' }}>
+                  {/* Walk-in Customer Option */}
+                  <button
+                    onClick={() => { 
+                      createNewTab(); 
+                      setShowCustomerModal(false);
+                      setCustomerSearch('');
+                    }}
+                    style={{
+                      width: '100%',
+                      textAlign: 'left',
+                      padding: '12px',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '8px',
+                      marginBottom: '8px',
+                      background: '#f0fdf4',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <div className="customer-name" style={{ fontWeight: 'bold' }}>🚶 Walk-in Customer</div>
+                    <div className="customer-outstanding" style={{ fontSize: '11px', color: '#6b7280' }}>No customer record needed</div>
+                  </button>
+                  
+                  {/* Existing Customers */}
+                  {filteredCustomers.length === 0 && customerSearch ? (
+                    <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280' }}>
+                      No customers found matching "{customerSearch}"
+                    </div>
+                  ) : (
+                    filteredCustomers.map(c => (
+                      <button
+                        key={c.id}
+                        onClick={() => { 
+                          createNewTab(c); 
+                          setShowCustomerModal(false);
+                          setCustomerSearch('');
+                        }}
+                        style={{
+                          width: '100%',
+                          textAlign: 'left',
+                          padding: '12px',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '8px',
+                          marginBottom: '8px',
+                          background: 'white',
+                          cursor: 'pointer',
+                          transition: 'background 0.2s'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = '#f9fafb'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
+                      >
+                        <div className="customer-name" style={{ fontWeight: 'bold' }}>{c.name}</div>
+                        {c.phone && <div style={{ fontSize: '12px', color: '#6b7280' }}>📞 {c.phone}</div>}
+                        <div style={{ fontSize: '11px', color: '#ef4444', marginTop: '4px' }}>
+                          Outstanding: ₦{(c.outstanding_balance || 0).toLocaleString()}
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+                
+                {/* Add New Customer Button */}
+                <button
+                  onClick={() => setShowAddCustomerForm(true)}
+                  style={{
+                    width: '100%',
+                    marginTop: '16px',
+                    padding: '10px',
+                    background: '#22c55e',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  + Add New Customer
+                </button>
+              </>
+            ) : (
+              <>
+                {/* Add Customer Form */}
+                <div style={{ flex: 1, overflowY: 'auto' }}>
+                  <div style={{ marginBottom: '12px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: '500', display: 'block', marginBottom: '4px' }}>Customer Name *</label>
+                    <input
+                      type="text"
+                      placeholder="Enter customer name"
+                      value={newCustomerName}
+                      onChange={(e) => setNewCustomerName(e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px' }}
+                      autoFocus
+                    />
+                  </div>
+                  <div style={{ marginBottom: '12px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: '500', display: 'block', marginBottom: '4px' }}>Phone Number (optional)</label>
+                    <input
+                      type="tel"
+                      placeholder="Enter phone number"
+                      value={newCustomerPhone}
+                      onChange={(e) => setNewCustomerPhone(e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px' }}
+                    />
+                  </div>
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: '500', display: 'block', marginBottom: '4px' }}>Email (optional)</label>
+                    <input
+                      type="email"
+                      placeholder="Enter email address"
+                      value={newCustomerEmail}
+                      onChange={(e) => setNewCustomerEmail(e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px' }}
+                    />
+                  </div>
+                </div>
+                
+                <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+                  <button
+                    onClick={addNewCustomer}
+                    disabled={addingCustomer}
+                    style={{
+                      flex: 1,
+                      padding: '10px',
+                      background: '#22c55e',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: addingCustomer ? 'not-allowed' : 'pointer',
+                      fontWeight: 'bold',
+                      opacity: addingCustomer ? 0.5 : 1
+                    }}
+                  >
+                    {addingCustomer ? 'Adding...' : 'Save Customer'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowAddCustomerForm(false);
+                      setNewCustomerName('');
+                      setNewCustomerPhone('');
+                      setNewCustomerEmail('');
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: '10px',
+                      background: '#e5e7eb',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Back
+                  </button>
+                </div>
+              </>
+            )}
+            
+            {/* Cancel Button */}
             <button
-              onClick={() => { createNewTab(); setShowCustomerModal(false) }}
-              className="customer-option"
+              onClick={() => {
+                setShowCustomerModal(false);
+                setCustomerSearch('');
+                setShowAddCustomerForm(false);
+                setNewCustomerName('');
+                setNewCustomerPhone('');
+                setNewCustomerEmail('');
+              }}
+              style={{
+                width: '100%',
+                marginTop: '12px',
+                padding: '10px',
+                background: '#ef4444',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer'
+              }}
             >
-              <div className="customer-name">Walk-in Customer</div>
-            </button>
-            {customers.map(c => (
-              <button
-                key={c.id}
-                onClick={() => { createNewTab(c); setShowCustomerModal(false) }}
-                className="customer-option"
-              >
-                <div className="customer-name">{c.name}</div>
-                <div className="customer-outstanding">Outstanding: ₦{(c.outstanding_balance || 0).toLocaleString()}</div>
-              </button>
-            ))}
-            <button onClick={() => setShowCustomerModal(false)} className="modal-cancel">
               Cancel
             </button>
           </div>
