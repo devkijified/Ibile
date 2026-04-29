@@ -4,7 +4,11 @@ import ProductManagement from './ProductManagement'
 import AddStock from './AddStock'
 import StaffManagement from './StaffManagement'
 
-function AdminPanel() {
+interface AdminPanelProps {
+  onViewCustomer?: (customerId: string) => void
+}
+
+function AdminPanel({ onViewCustomer }: AdminPanelProps) {
   const [activeTab, setActiveTab] = useState('dashboard')
 
   return (
@@ -25,7 +29,7 @@ function AdminPanel() {
       </div>
 
       <div style={{ padding: '20px' }}>
-        {activeTab === 'dashboard' && <AdminDashboard />}
+        {activeTab === 'dashboard' && <AdminDashboard onViewCustomer={onViewCustomer} />}
         {activeTab === 'products' && <ProductManagement />}
         {activeTab === 'addstock' && <AddStock />}
         {activeTab === 'staff' && <StaffManagement />}
