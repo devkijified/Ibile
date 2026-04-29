@@ -3,12 +3,9 @@ import { supabase } from '../lib/supabase'
 import { Product, CartItem } from '../types'
 import { toast, Toaster } from 'react-hot-toast'
 import { 
-  getLoyaltySummary, 
+   getLoyaltySummary, 
   validatePointsRedemption, 
   processLoyaltyAfterSale,
-  estimatePointsEarned,
-  formatCurrency,
-  formatPoints,
   getTierName
 } from '../services/loyaltyService'
 
