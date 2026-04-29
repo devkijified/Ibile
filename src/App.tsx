@@ -13,10 +13,15 @@ function App() {
   const [isAdmin, setIsAdmin] = useState(false)
   const [showAdminPrompt, setShowAdminPrompt] = useState(false)
   const [adminPassword, setAdminPassword] = useState('')
+  const [userName, setUserName] = useState('')
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
+      if (session?.user?.email) {
+        const name = session.user.email.split('@')[0]
+        setUserName(name.charAt(0).toUpperCase() + name.slice(1))
+      }
       setLoading(false)
     })
 
@@ -31,7 +36,6 @@ function App() {
     if (adminPassword === 'ADMIN123') {
       setIsAdmin(true)
       setShowAdminPrompt(false)
-      setCurrentView('admin')
       setAdminPassword('')
     } else {
       alert('Invalid admin password')
@@ -81,29 +85,28 @@ function App() {
         </div>
       )}
 
-      {/* Navigation Header - No overlap */}
+      {/* Main Navigation Header */}
       <div style={{
-        background: 'white',
-        borderBottom: '1px solid #e5e7eb',
+        background: '#1e3c2c',
+        color: 'white',
         padding: '12px 24px',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        position: 'relative',
-        zIndex: 10
+        flexWrap: 'wrap',
+        gap: '12px'
       }}>
-        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-          <h1 style={{ fontSize: '20px', fontWeight: 'bold', color: '#1e3c2c' }}>🍺 Ibile POS</h1>
-          <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <h1 style={{ fontSize: '20px', fontWeight: 'bold' }}>🍺 Ibile POS</h1>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <button
               onClick={() => setCurrentView('pos')}
               style={{
-                padding: '8px 16px',
-                borderRadius: '8px',
+                padding: '6px 16px',
+                borderRadius: '6px',
                 fontSize: '14px',
-                fontWeight: '500',
                 background: currentView === 'pos' ? '#22c55e' : 'transparent',
-                color: currentView === 'pos' ? 'white' : '#4b5563',
+                color: 'white',
                 border: 'none',
                 cursor: 'pointer'
               }}
@@ -119,12 +122,11 @@ function App() {
                 }
               }}
               style={{
-                padding: '8px 16px',
-                borderRadius: '8px',
+                padding: '6px 16px',
+                borderRadius: '6px',
                 fontSize: '14px',
-                fontWeight: '500',
                 background: currentView === 'customers' ? '#22c55e' : 'transparent',
-                color: currentView === 'customers' ? 'white' : '#4b5563',
+                color: 'white',
                 border: 'none',
                 cursor: 'pointer'
               }}
@@ -140,12 +142,11 @@ function App() {
                 }
               }}
               style={{
-                padding: '8px 16px',
-                borderRadius: '8px',
+                padding: '6px 16px',
+                borderRadius: '6px',
                 fontSize: '14px',
-                fontWeight: '500',
                 background: currentView === 'admin' ? '#22c55e' : 'transparent',
-                color: currentView === 'admin' ? 'white' : '#4b5563',
+                color: 'white',
                 border: 'none',
                 cursor: 'pointer'
               }}
@@ -154,10 +155,13 @@ function App() {
             </button>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '13px', background: '#2d5a3f', padding: '4px 10px', borderRadius: '20px' }}>
+            👤 {userName}
+          </span>
           {isAdmin && (
-            <span style={{ fontSize: '12px', background: '#22c55e', color: 'white', padding: '4px 10px', borderRadius: '20px' }}>
-              👑 Admin Mode
+            <span style={{ fontSize: '12px', background: '#22c55e', padding: '4px 10px', borderRadius: '20px' }}>
+              👑 Admin
             </span>
           )}
           {!isAdmin && (
@@ -170,16 +174,16 @@ function App() {
           )}
           <button
             onClick={() => supabase.auth.signOut()}
-            style={{ background: 'transparent', color: '#dc2626', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', border: 'none', cursor: 'pointer' }}
+            style={{ background: '#dc2626', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', border: 'none', cursor: 'pointer' }}
           >
             Sign Out
           </button>
         </div>
       </div>
 
-      {/* Content Area - No header overlap */}
+      {/* Content */}
       <div>
-        {currentView === 'pos' && <POS isAdmin={isAdmin} />}
+        {currentView === 'pos' && <POS isAdmin={isAdmin} userName={userName} />}
         {currentView === 'customers' && isAdmin && <Customers />}
         {currentView === 'customers' && !isAdmin && (
           <div style={{ textAlign: 'center', padding: '60px 20px' }}>
