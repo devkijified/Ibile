@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './lib/supabase'
 import Login from './pages/Login'
+import CustomerDetails from './pages/CustomerDetails'
 import POS from './pages/POS'
 import Customers from './pages/Customers'
 import AdminPanel from './pages/AdminPanel'
