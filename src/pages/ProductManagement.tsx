@@ -129,19 +129,19 @@ function ProductManagement() {
     return ((selling - cost) / selling) * 100
   }
 
-  const totalInventoryValue = products.reduce((sum, p) => {
+  const totalCostForAllStock = products.reduce((sum, p) => {
     const cost = p.cost || p.current_cost || 0
     return sum + (cost * (p.stock || 0))
+  }, 0)
+
+  const totalPotentialRevenue = products.reduce((sum, p) => {
+    return sum + (p.price * (p.stock || 0))
   }, 0)
 
   const totalPotentialProfit = products.reduce((sum, p) => {
     const cost = p.cost || p.current_cost || 0
     const profitPerUnit = p.price - cost
     return sum + (profitPerUnit * (p.stock || 0))
-  }, 0)
-
-  const totalPotentialRevenue = products.reduce((sum, p) => {
-    return sum + (p.price * (p.stock || 0))
   }, 0)
 
   return (
@@ -151,14 +151,14 @@ function ProductManagement() {
       {/* Inventory Summary Cards */}
       <div style={{ 
         display: 'grid', 
-        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', 
+        gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', 
         gap: '12px', 
         marginBottom: '20px' 
       }}>
         <div style={{ background: 'white', padding: '16px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-          <div style={{ fontSize: '12px', color: '#6b7280' }}>Total Inventory Value</div>
-          <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#3b82f6' }}>₦{totalInventoryValue.toLocaleString()}</div>
-          <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '4px' }}>Cost price × stock</div>
+          <div style={{ fontSize: '12px', color: '#6b7280' }}>Total Cost Price</div>
+          <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#ef4444' }}>₦{totalCostForAllStock.toLocaleString()}</div>
+          <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '4px' }}>Total investment in stock</div>
         </div>
         <div style={{ background: 'white', padding: '16px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
           <div style={{ fontSize: '12px', color: '#6b7280' }}>Potential Revenue</div>
@@ -203,16 +203,17 @@ function ProductManagement() {
         <div style={{ textAlign: 'center', padding: '40px' }}>Loading products...</div>
       ) : (
         <div style={{ background: 'white', borderRadius: '12px', overflow: 'auto', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1000px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1100px' }}>
             <thead style={{ background: '#f9fafb' }}>
               <tr>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Name</th>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Category</th>
                 <th style={{ padding: '12px', textAlign: 'right' }}>Selling Price</th>
-                <th style={{ padding: '12px', textAlign: 'right' }}>Cost Price</th>
+                <th style={{ padding: '12px', textAlign: 'right' }}>Cost/Unit</th>
                 <th style={{ padding: '12px', textAlign: 'right' }}>Profit/Unit</th>
                 <th style={{ padding: '12px', textAlign: 'right' }}>Stock</th>
-                <th style={{ padding: '12px', textAlign: 'right' }}>Inv Value</th>
+                <th style={{ padding: '12px', textAlign: 'right' }}>Total Cost</th>
+                <th style={{ padding: '12px', textAlign: 'right' }}>Total Value</th>
                 <th style={{ padding: '12px', textAlign: 'right' }}>Stock Profit</th>
                 <th style={{ padding: '12px', textAlign: 'right' }}>Actions</th>
               </tr>
@@ -222,7 +223,8 @@ function ProductManagement() {
                 const cost = product.cost || product.current_cost || 0
                 const profitPerUnit = expectedProfit(product.price, cost)
                 const margin = profitMargin(product.price, cost)
-                const inventoryValue = cost * (product.stock || 0)
+                const totalCostForStock = cost * (product.stock || 0)
+                const totalValueForStock = product.price * (product.stock || 0)
                 const stockProfit = profitPerUnit * (product.stock || 0)
                 return (
                   <tr key={product.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
@@ -238,8 +240,11 @@ function ProductManagement() {
                     <td style={{ padding: '12px', textAlign: 'right', color: product.stock <= 12 ? '#ef4444' : '#1f2937', fontWeight: 'bold' }}>
                       {product.stock}
                     </td>
+                    <td style={{ padding: '12px', textAlign: 'right', color: '#ef4444' }}>
+                      ₦{totalCostForStock.toLocaleString()}
+                    </td>
                     <td style={{ padding: '12px', textAlign: 'right', color: '#3b82f6' }}>
-                      ₦{inventoryValue.toLocaleString()}
+                      ₦{totalValueForStock.toLocaleString()}
                     </td>
                     <td style={{ padding: '12px', textAlign: 'right' }}>
                       <span style={{ color: stockProfit > 0 ? '#22c55e' : '#ef4444', fontWeight: 'bold' }}>
