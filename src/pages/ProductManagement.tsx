@@ -131,7 +131,7 @@ function ProductManagement() {
         <div style={{ textAlign: 'center', padding: '40px' }}>Loading products...</div>
       ) : (
         <div style={{ background: 'white', borderRadius: '12px', overflow: 'auto', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '800px' }}>
             <thead style={{ background: '#f9fafb' }}>
               <tr>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Name</th>
@@ -145,14 +145,15 @@ function ProductManagement() {
             </thead>
             <tbody>
               {filteredProducts.map(product => {
-                const profit = expectedProfit(product.price, product.cost || product.current_cost)
-                const margin = profitMargin(product.price, product.cost || product.current_cost)
+                const cost = product.cost || product.current_cost || 0
+                const profit = expectedProfit(product.price, cost)
+                const margin = profitMargin(product.price, cost)
                 return (
                   <tr key={product.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
                     <td style={{ padding: '12px' }}>{product.name}</td>
                     <td style={{ padding: '12px' }}>{product.category}</td>
-                    <td style={{ padding: '12px', textAlign: 'right' }}>₦{product.price.toLocaleString()}Js
-                    <td style={{ padding: '12px', textAlign: 'right', color: '#6b7280' }}>₦{(product.cost || product.current_cost || 0).toLocaleString()}Js
+                    <td style={{ padding: '12px', textAlign: 'right' }}>₦{product.price.toLocaleString()}</td>
+                    <td style={{ padding: '12px', textAlign: 'right', color: '#6b7280' }}>₦{cost.toLocaleString()}</td>
                     <td style={{ padding: '12px', textAlign: 'right' }}>
                       <span style={{ color: profit > 0 ? '#22c55e' : '#ef4444', fontWeight: 'bold' }}>
                         ₦{profit.toLocaleString()} ({margin.toFixed(0)}%)
@@ -168,7 +169,7 @@ function ProductManagement() {
                           setFormData({
                             name: product.name,
                             price: product.price.toString(),
-                            cost_price: (product.cost || product.current_cost || 0).toString(),
+                            cost_price: cost.toString(),
                             stock: product.stock.toString(),
                             category: product.category || ''
                           })
@@ -233,7 +234,7 @@ function ProductManagement() {
                 onChange={(e) => setFormData({...formData, category: e.target.value})}
                 style={{ flex: 1, padding: '10px', border: '1px solid #ccc', borderRadius: '6px' }}
               >
-                <option value="">Category</option>
+                <option value="">Select Category</option>
                 {categories.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
