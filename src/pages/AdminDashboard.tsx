@@ -16,95 +16,122 @@ function AdminDashboard() {
   const [selectedCustomers, setSelectedCustomers] = useState<any[]>([])
 
   useEffect(() => {
-    Promise.all([fetchSalesData(), fetchLowStockAlerts()])
+    fetchAllData()
   }, [])
 
-  async function fetchSalesData() {
-    const sevenDaysAgo = new Date()
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-    
-    const { data: invoices, error } = await supabase
-      .from('invoices')
-      .select('created_at, total, payment_method, customer_name')
-      .gte('created_at', sevenDaysAgo.toISOString())
-      .order('created_at', { ascending: false })
-      .limit(500)
-
-    if (error) {
-      console.error('Error fetching sales:', error)
-      setLoading(false)
-      return
-    }
-
-    const salesByDate: { [key: string]: DailySales } = {}
-    
-    invoices?.forEach(invoice => {
-      const date = new Date(invoice.created_at).toLocaleDateString('en-NG')
-      
-      if (!salesByDate[date]) {
-        salesByDate[date] = {
-          date,
-          total_sales: 0,
-          outstanding: 0,
-          invoice_count: 0
-        }
-      }
-      
-      salesByDate[date].total_sales += invoice.total
-      salesByDate[date].invoice_count += 1
-      
-      if (invoice.payment_method === 'outstanding') {
-        salesByDate[date].outstanding += invoice.total
-      }
-    })
-
-    const sortedSales = Object.values(salesByDate).sort((a: any, b: any) => 
-      new Date(b.date).getTime() - new Date(a.date).getTime()
-    )
-
-    setDailySales(sortedSales)
-    if (sortedSales.length > 0) {
-      setSelectedDate(sortedSales[0].date)
-      await fetchCustomersForDate(sortedSales[0].date)
-    }
+  async function fetchAllData() {
+    setLoading(true)
+    await Promise.all([
+      fetchSalesData(),
+      fetchLowStockAlerts()
+    ])
     setLoading(false)
   }
 
-  async function fetchCustomersForDate(date: string) {
-    const startDate = new Date(date)
-    const endDate = new Date(date)
-    endDate.setDate(endDate.getDate() + 1)
-    
-    const { data } = await supabase
-      .from('invoices')
-      .select('customer_name, total')
-      .gte('created_at', startDate.toISOString())
-      .lt('created_at', endDate.toISOString())
-      .limit(50)
-    
-    if (data) {
-      const customerMap = new Map()
-      data.forEach(inv => {
-        const existing = customerMap.get(inv.customer_name)
-        if (existing) {
-          existing.total += inv.total
-        } else {
-          customerMap.set(inv.customer_name, { name: inv.customer_name, total: inv.total })
+  async function fetchSalesData() {
+    try {
+      const sevenDaysAgo = new Date()
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+      
+      const { data: invoices, error } = await supabase
+        .from('invoices')
+        .select('created_at, total, payment_method, customer_name')
+        .gte('created_at', sevenDaysAgo.toISOString())
+        .order('created_at', { ascending: false })
+        .limit(500)
+
+      if (error) {
+        console.error('Error fetching sales:', error)
+        return
+      }
+
+      if (!invoices || invoices.length === 0) {
+        console.log('No invoices found')
+        setDailySales([])
+        return
+      }
+
+      const salesByDate: { [key: string]: DailySales } = {}
+      
+      invoices.forEach(invoice => {
+        const date = new Date(invoice.created_at).toLocaleDateString('en-NG')
+        
+        if (!salesByDate[date]) {
+          salesByDate[date] = {
+            date,
+            total_sales: 0,
+            outstanding: 0,
+            invoice_count: 0
+          }
+        }
+        
+        salesByDate[date].total_sales += invoice.total
+        salesByDate[date].invoice_count += 1
+        
+        if (invoice.payment_method === 'outstanding') {
+          salesByDate[date].outstanding += invoice.total
         }
       })
-      setSelectedCustomers(Array.from(customerMap.values()).slice(0, 10))
+
+      const sortedSales = Object.values(salesByDate).sort((a: any, b: any) => 
+        new Date(b.date).getTime() - new Date(a.date).getTime()
+      )
+
+      setDailySales(sortedSales)
+      if (sortedSales.length > 0) {
+        setSelectedDate(sortedSales[0].date)
+        await fetchCustomersForDate(sortedSales[0].date)
+      }
+    } catch (err) {
+      console.error('Error in fetchSalesData:', err)
+    }
+  }
+
+  async function fetchCustomersForDate(date: string) {
+    try {
+      const startDate = new Date(date)
+      const endDate = new Date(date)
+      endDate.setDate(endDate.getDate() + 1)
+      
+      const { data } = await supabase
+        .from('invoices')
+        .select('customer_name, total')
+        .gte('created_at', startDate.toISOString())
+        .lt('created_at', endDate.toISOString())
+        .limit(50)
+      
+      if (data && data.length > 0) {
+        const customerMap = new Map()
+        data.forEach(inv => {
+          const existing = customerMap.get(inv.customer_name)
+          if (existing) {
+            existing.total += inv.total
+          } else {
+            customerMap.set(inv.customer_name, { name: inv.customer_name, total: inv.total })
+          }
+        })
+        setSelectedCustomers(Array.from(customerMap.values()).slice(0, 10))
+      } else {
+        setSelectedCustomers([])
+      }
+    } catch (err) {
+      console.error('Error fetching customers:', err)
     }
   }
 
   async function fetchLowStockAlerts() {
-    const { data } = await supabase
-      .from('products')
-      .select('id, name, stock')
-      .lte('stock', 12)
-      .order('stock', { ascending: true })
-      .limit(20)
-    
-    setLowStockProducts(data || [])
+    try {
+      const { data } = await supabase
+        .from('products')
+        .select('id, name, stock')
+        .lte('stock', 12)
+        .order('stock', { ascending: true })
+        .limit(20)
+      
+      setLowStockProducts(data || [])
+    } catch (err) {
+      console.error('Error fetching low stock:', err)
+    }
   }
 
   const handleDateSelect = async (date: string) => {
@@ -115,7 +142,23 @@ function AdminDashboard() {
   const selectedDayData = dailySales.find(d => d.date === selectedDate)
 
   if (loading) {
-    return <div style={{ textAlign: 'center', padding: '40px' }}>Loading dashboard...</div>
+    return (
+      <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+        <div>Loading dashboard data...</div>
+        <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '8px' }}>Fetching sales records from Supabase</div>
+      </div>
+    )
+  }
+
+  if (dailySales.length === 0) {
+    return (
+      <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+        <div>No sales data available</div>
+        <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '8px' }}>
+          Complete some sales on the POS terminal to see data here
+        </div>
+      </div>
+    )
   }
 
   const totalSales = dailySales.reduce((sum, d) => sum + d.total_sales, 0)
@@ -130,17 +173,45 @@ function AdminDashboard() {
         gap: '16px', 
         marginBottom: '24px' 
       }}>
-        <div style={{ background: 'white', padding: '16px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-          <div style={{ fontSize: '12px', color: '#6b7280' }}>7-Day Sales</div>
+        <div style={{ background: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+          <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '8px' }}>📊 7-Day Sales</div>
           <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#22c55e' }}>₦{totalSales.toLocaleString()}</div>
         </div>
-        <div style={{ background: 'white', padding: '16px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-          <div style={{ fontSize: '12px', color: '#6b7280' }}>Outstanding</div>
+        <div style={{ background: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+          <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '8px' }}>💰 Outstanding</div>
           <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#ef4444' }}>₦{totalOutstanding.toLocaleString()}</div>
         </div>
-        <div style={{ background: 'white', padding: '16px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-          <div style={{ fontSize: '12px', color: '#6b7280' }}>Low Stock</div>
+        <div style={{ background: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+          <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '8px' }}>⚠️ Low Stock</div>
           <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#f59e0b' }}>{lowStockProducts.length}</div>
+        </div>
+      </div>
+
+      {/* Simple Chart - Bar Chart for Sales Trend */}
+      <div style={{ background: 'white', borderRadius: '12px', padding: '20px', marginBottom: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+        <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '20px' }}>Sales Trend (Last 7 Days)</h3>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '200px', overflowX: 'auto', paddingBottom: '10px' }}>
+          {dailySales.slice(0, 7).map(day => {
+            const maxSale = Math.max(...dailySales.map(d => d.total_sales), 1)
+            const height = (day.total_sales / maxSale) * 160
+            return (
+              <div key={day.date} style={{ flex: '1', minWidth: '60px', textAlign: 'center' }}>
+                <div style={{ 
+                  height: `${height}px`, 
+                  background: '#22c55e', 
+                  borderRadius: '4px 4px 0 0',
+                  transition: 'height 0.3s ease',
+                  cursor: 'pointer'
+                }}
+                onClick={() => handleDateSelect(day.date)}
+                />
+                <div style={{ fontSize: '10px', marginTop: '8px', color: selectedDate === day.date ? '#22c55e' : '#6b7280', fontWeight: selectedDate === day.date ? 'bold' : 'normal' }}>
+                  {day.date.split('/')[0]}/{day.date.split('/')[1]}
+                </div>
+                <div style={{ fontSize: '10px', fontWeight: 'bold' }}>₦{(day.total_sales / 1000).toFixed(0)}k</div>
+              </div>
+            )
+          })}
         </div>
       </div>
 
@@ -172,7 +243,7 @@ function AdminDashboard() {
       {/* Selected Date Details */}
       {selectedDayData && (
         <div style={{ background: 'white', borderRadius: '12px', padding: '20px', marginBottom: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-          <h2 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '16px' }}>{selectedDayData.date}</h2>
+          <h2 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '16px' }}>📅 {selectedDayData.date}</h2>
           
           <div style={{ display: 'flex', gap: '32px', marginBottom: '20px', flexWrap: 'wrap' }}>
             <div>
