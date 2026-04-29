@@ -39,6 +39,7 @@ function AdminDashboard() {
   const [expandedDate, setExpandedDate] = useState<string | null>(null)
   const [expandedInvoice, setExpandedInvoice] = useState<string | null>(null)
   const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null)
+  const [expandedSalesCustomer, setExpandedSalesCustomer] = useState<string | null>(null)
   const [invoicesByDate, setInvoicesByDate] = useState<{ [key: string]: InvoiceDetail[] }>({})
   const [customerPurchases, setCustomerPurchases] = useState<{ [key: string]: CustomerPurchase[] }>({})
   const [customerTotals, setCustomerTotals] = useState<{ [key: string]: { total: number; outstanding: number } }>({})
@@ -213,9 +214,18 @@ function AdminDashboard() {
     }
   }
 
-  async function fetchCustomerPurchaseHistory(customerName: string, customerId: string) {
-    if (customerPurchases[customerName]) {
+  async function fetchCustomerPurchaseHistory(customerName: string, customerId: string, source: string) {
+    // Close other expanded customers based on source
+    if (source === 'top') {
       setExpandedCustomer(expandedCustomer === customerName ? null : customerName)
+      setExpandedSalesCustomer(null)
+    } else {
+      setExpandedSalesCustomer(expandedSalesCustomer === customerName ? null : customerName)
+      setExpandedCustomer(null)
+    }
+
+    // If already loaded, just toggle
+    if (customerPurchases[customerName]) {
       return
     }
 
@@ -258,10 +268,8 @@ function AdminDashboard() {
         [customerName]: { total: totalSpent, outstanding: totalOutstanding } 
       }))
       setSelectedCustomerDetails({ name: customerName, id: customerId })
-      setExpandedCustomer(customerName)
     } else {
       setCustomerPurchases(prev => ({ ...prev, [customerName]: [] }))
-      setExpandedCustomer(customerName)
     }
   }
 
@@ -290,9 +298,6 @@ function AdminDashboard() {
     setExpandedInvoice(expandedInvoice === invoiceId ? null : invoiceId)
   }
 
-  const selectedDayData = dailySales.find(d => d.date === selectedDate)
-  const currentInvoices = invoicesByDate[selectedDate] || []
-
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: '60px 20px' }}>
@@ -318,6 +323,10 @@ function AdminDashboard() {
 
   const displayedLowStock = showAllLowStock ? lowStockProducts : lowStockProducts.slice(0, 6)
 
+  // Chart data - get last 7 days sales
+  const chartData = dailySales.slice(0, 7).reverse()
+  const maxSale = Math.max(...chartData.map(d => d.total_sales), 1)
+
   return (
     <div style={{ padding: '12px', maxWidth: '1200px', margin: '0 auto' }}>
       {/* Stats Cards */}
@@ -341,6 +350,43 @@ function AdminDashboard() {
         </div>
       </div>
 
+      {/* Sales Trend Chart */}
+      <div style={{ background: 'white', borderRadius: '12px', padding: '16px', marginBottom: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+        <h3 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '16px' }}>📈 Sales Trend (Last 7 Days)</h3>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', height: '160px', overflowX: 'auto', paddingBottom: '8px' }}>
+          {chartData.map(day => {
+            const height = (day.total_sales / maxSale) * 120
+            const isSelected = selectedDate === day.date
+            return (
+              <div key={day.date} style={{ flex: '1', minWidth: '50px', textAlign: 'center' }}>
+                <button
+                  onClick={() => handleDateSelect(day.date)}
+                  style={{
+                    width: '100%',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: 0
+                  }}
+                >
+                  <div style={{ 
+                    height: `${height}px`, 
+                    background: isSelected ? '#22c55e' : '#86efac', 
+                    borderRadius: '4px 4px 0 0',
+                    transition: 'height 0.3s ease',
+                    marginBottom: '4px'
+                  }} />
+                  <div style={{ fontSize: '9px', color: isSelected ? '#22c55e' : '#6b7280', fontWeight: isSelected ? 'bold' : 'normal' }}>
+                    {day.date.split('/')[0]}/{day.date.split('/')[1]}
+                  </div>
+                  <div style={{ fontSize: '9px', fontWeight: 'bold' }}>₦{(day.total_sales / 1000).toFixed(0)}k</div>
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
       {/* Top Customers Section - Clickable */}
       <div style={{ background: 'white', borderRadius: '12px', padding: '16px', marginBottom: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         <h3 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '12px' }}>🏆 Top Customers (Min ₦50K / 7 days)</h3>
@@ -353,7 +399,7 @@ function AdminDashboard() {
             {topCustomers.map((customer, idx) => (
               <div key={idx}>
                 <button
-                  onClick={() => fetchCustomerPurchaseHistory(customer.name, customer.customer_id)}
+                  onClick={() => fetchCustomerPurchaseHistory(customer.name, customer.customer_id, 'top')}
                   style={{
                     width: '100%',
                     display: 'flex',
@@ -385,58 +431,11 @@ function AdminDashboard() {
                 
                 {/* Customer Purchase History */}
                 {expandedCustomer === customer.name && customerPurchases[customer.name] && (
-                  <div style={{ marginTop: '8px', marginLeft: '24px', background: '#f9fafb', borderRadius: '8px', padding: '12px', border: '1px solid #e5e7eb' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-                      <div>
-                        <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{customer.name}</div>
-                        <div style={{ fontSize: '11px', color: '#6b7280' }}>Purchase History</div>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '12px', color: '#22c55e' }}>Total: ₦{(customerTotals[customer.name]?.total || 0).toLocaleString()}</div>
-                        <div style={{ fontSize: '11px', color: '#ef4444' }}>Outstanding: ₦{(customerTotals[customer.name]?.outstanding || 0).toLocaleString()}</div>
-                      </div>
-                    </div>
-                    
-                    {customerPurchases[customer.name].length === 0 ? (
-                      <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280', fontSize: '12px' }}>
-                        No purchase history found
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '300px', overflowY: 'auto' }}>
-                        {customerPurchases[customer.name].map((purchase, idx) => (
-                          <div key={idx} style={{ background: 'white', borderRadius: '8px', padding: '10px', border: '1px solid #e5e7eb' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-                              <div>
-                                <div style={{ fontWeight: 'bold', fontSize: '12px' }}>{purchase.invoice_number}</div>
-                                <div style={{ fontSize: '10px', color: '#6b7280' }}>{purchase.date}</div>
-                              </div>
-                              <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontWeight: 'bold', fontSize: '13px', color: '#22c55e' }}>₦{purchase.total.toLocaleString()}</div>
-                                <div style={{ fontSize: '9px', color: purchase.status === 'outstanding' ? '#ef4444' : '#6b7280' }}>
-                                  {purchase.payment_method} {purchase.status === 'outstanding' && '(Outstanding)'}
-                                </div>
-                              </div>
-                            </div>
-                            {purchase.items && purchase.items.length > 0 && (
-                              <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: '1px solid #e5e7eb' }}>
-                                <div style={{ fontSize: '10px', color: '#6b7280' }}>Items:</div>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
-                                  {purchase.items.slice(0, 3).map((item, itemIdx) => (
-                                    <span key={itemIdx} style={{ fontSize: '10px', background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px' }}>
-                                      {item.name} x{item.quantity}
-                                    </span>
-                                  ))}
-                                  {purchase.items.length > 3 && (
-                                    <span style={{ fontSize: '10px', color: '#6b7280' }}>+{purchase.items.length - 3} more</span>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  <CustomerHistory 
+                    customerName={customer.name} 
+                    purchases={customerPurchases[customer.name]} 
+                    totals={customerTotals[customer.name]} 
+                  />
                 )}
               </div>
             ))}
@@ -444,7 +443,7 @@ function AdminDashboard() {
         )}
       </div>
 
-      {/* Date Cards - Sales Records */}
+      {/* Daily Sales Records - With Clickable Customers */}
       <div style={{ marginBottom: '20px' }}>
         <h3 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '12px' }}>📅 Daily Sales Records</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -509,6 +508,56 @@ function AdminDashboard() {
                       </div>
                     </div>
                     
+                    {/* Customers for this day - Clickable */}
+                    {selectedCustomers.length > 0 && selectedDate === day.date && (
+                      <div style={{ marginBottom: '16px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '8px', color: '#4b5563' }}>
+                          👥 Top Customers Today (Min ₦50K)
+                        </div>
+                        {selectedCustomers.map((customer, idx) => (
+                          <div key={idx}>
+                            <button
+                              onClick={() => fetchCustomerPurchaseHistory(customer.name, customer.customer_id, 'sales')}
+                              style={{
+                                width: '100%',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                padding: '8px 12px',
+                                background: '#f3f4f6',
+                                borderRadius: '6px',
+                                border: 'none',
+                                cursor: 'pointer',
+                                marginBottom: '4px'
+                              }}
+                            >
+                              <span style={{ fontSize: '12px' }}>
+                                {customer.name.length > 25 ? customer.name.substring(0, 22) + '...' : customer.name}
+                              </span>
+                              <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#22c55e' }}>
+                                ₦{customer.total.toLocaleString()}
+                              </span>
+                            </button>
+                            {/* Customer Purchase History from Sales Record */}
+                            {expandedSalesCustomer === customer.name && customerPurchases[customer.name] && (
+                              <div style={{ marginLeft: '12px', marginBottom: '8px' }}>
+                                <CustomerHistory 
+                                  customerName={customer.name} 
+                                  purchases={customerPurchases[customer.name]} 
+                                  totals={customerTotals[customer.name]} 
+                                />
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        {selectedCustomers.length === 0 && (
+                          <div style={{ fontSize: '12px', color: '#6b7280', textAlign: 'center', padding: '12px' }}>
+                            No customers with ₦50,000+ sales on this day
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
                     {/* Invoice Records */}
                     <div style={{ marginTop: '12px' }}>
                       <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '8px', color: '#4b5563' }}>
@@ -540,8 +589,22 @@ function AdminDashboard() {
                             >
                               <div>
                                 <div style={{ fontWeight: 'bold', fontSize: '12px' }}>{invoice.invoice_number}</div>
-                                <div style={{ fontSize: '10px', color: '#6b7280' }}>
+                                <div 
+                                  style={{ 
+                                    fontSize: '10px', 
+                                    color: '#3b82f6',
+                                    textDecoration: 'underline',
+                                    cursor: invoice.customer_name !== 'Walk-in Customer' ? 'pointer' : 'default'
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (invoice.customer_name !== 'Walk-in Customer') {
+                                      fetchCustomerPurchaseHistory(invoice.customer_name, invoice.customer_id, 'sales')
+                                    }
+                                  }}
+                                >
                                   {invoice.customer_name.length > 25 ? invoice.customer_name.substring(0, 22) + '...' : invoice.customer_name}
+                                  {invoice.customer_name !== 'Walk-in Customer' && ' 🔍'}
                                 </div>
                               </div>
                               <div style={{ textAlign: 'right' }}>
@@ -618,6 +681,71 @@ function AdminDashboard() {
               {showAllLowStock ? 'Show Less' : `Show ${lowStockProducts.length - 6} More`}
             </button>
           )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Customer History Component
+function CustomerHistory({ customerName, purchases, totals }: { customerName: string; purchases: CustomerPurchase[]; totals: { total: number; outstanding: number } }) {
+  const [expandedPurchase, setExpandedPurchase] = useState<string | null>(null)
+
+  return (
+    <div style={{ marginTop: '8px', background: '#f9fafb', borderRadius: '8px', padding: '12px', border: '1px solid #e5e7eb' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+        <div>
+          <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{customerName}</div>
+          <div style={{ fontSize: '11px', color: '#6b7280' }}>Purchase History</div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: '12px', color: '#22c55e' }}>Total: ₦{totals?.total?.toLocaleString() || 0}</div>
+          <div style={{ fontSize: '11px', color: '#ef4444' }}>Outstanding: ₦{totals?.outstanding?.toLocaleString() || 0}</div>
+        </div>
+      </div>
+      
+      {purchases.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280', fontSize: '12px' }}>
+          No purchase history found
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '300px', overflowY: 'auto' }}>
+          {purchases.map((purchase, idx) => (
+            <div key={idx} style={{ background: 'white', borderRadius: '8px', padding: '10px', border: '1px solid #e5e7eb' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                <div>
+                  <div style={{ fontWeight: 'bold', fontSize: '12px' }}>{purchase.invoice_number}</div>
+                  <div style={{ fontSize: '10px', color: '#6b7280' }}>{purchase.date}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontWeight: 'bold', fontSize: '13px', color: '#22c55e' }}>₦{purchase.total.toLocaleString()}</div>
+                  <div style={{ fontSize: '9px', color: purchase.status === 'outstanding' ? '#ef4444' : '#6b7280' }}>
+                    {purchase.payment_method} {purchase.status === 'outstanding' && '(Outstanding)'}
+                  </div>
+                </div>
+                {purchase.items && purchase.items.length > 0 && (
+                  <button
+                    onClick={() => setExpandedPurchase(expandedPurchase === purchase.invoice_number ? null : purchase.invoice_number)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280' }}
+                  >
+                    {expandedPurchase === purchase.invoice_number ? '▲ Hide Items' : '▼ Show Items'}
+                  </button>
+                )}
+              </div>
+              {expandedPurchase === purchase.invoice_number && purchase.items && (
+                <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: '1px solid #e5e7eb' }}>
+                  <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '4px' }}>Items:</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {purchase.items.map((item, itemIdx) => (
+                      <span key={itemIdx} style={{ fontSize: '10px', background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px' }}>
+                        {item.name} x{item.quantity} = ₦{(item.price * item.quantity).toLocaleString()}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>
