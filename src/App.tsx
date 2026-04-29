@@ -33,7 +33,7 @@ function App() {
       setShowAdminPrompt(false)
       setCurrentView('admin')
       setAdminPassword('')
-      alert('Admin access granted')
+      toast.success('Admin access granted')
     } else {
       alert('Invalid admin password')
       setAdminPassword('')
@@ -58,7 +58,7 @@ function App() {
           <div className="modal" style={{ width: '320px' }}>
             <h2 className="modal-title">Admin Access Required</h2>
             <p style={{ fontSize: '14px', color: '#666', marginBottom: '16px' }}>
-              Enter admin password to access customer management and admin panel
+              Enter admin password to access customer and admin panels
             </p>
             <input
               type="password"
@@ -88,7 +88,7 @@ function App() {
             onClick={() => setCurrentView('pos')}
             className={`nav-btn ${currentView === 'pos' ? 'nav-btn-active' : 'nav-btn-inactive'}`}
           >
-            POS
+            POS Terminal
           </button>
           <button
             onClick={() => {
@@ -100,22 +100,34 @@ function App() {
             }}
             className={`nav-btn ${currentView === 'customers' ? 'nav-btn-active' : 'nav-btn-inactive'}`}
           >
-            Customers
+            Customer Management
           </button>
-          {isAdmin && (
-            <button
-              onClick={() => setCurrentView('admin')}
-              className={`nav-btn ${currentView === 'admin' ? 'nav-btn-active' : 'nav-btn-inactive'}`}
-            >
-              Admin Panel
-            </button>
-          )}
+          <button
+            onClick={() => {
+              if (isAdmin) {
+                setCurrentView('admin')
+              } else {
+                setShowAdminPrompt(true)
+              }
+            }}
+            className={`nav-btn ${currentView === 'admin' ? 'nav-btn-active' : 'nav-btn-inactive'}`}
+          >
+            Super Admin Panel
+          </button>
         </div>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           {isAdmin && (
-            <span style={{ fontSize: '13px', background: '#22c55e', color: 'white', padding: '4px 10px', borderRadius: '20px' }}>
-              Admin Mode
+            <span style={{ fontSize: '12px', background: '#22c55e', color: 'white', padding: '4px 10px', borderRadius: '20px' }}>
+              👑 Admin Mode
             </span>
+          )}
+          {!isAdmin && (
+            <button
+              onClick={() => setShowAdminPrompt(true)}
+              style={{ background: '#3b82f6', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '12px' }}
+            >
+              Admin Login
+            </button>
           )}
           <button onClick={() => supabase.auth.signOut()} className="logout-btn">
             Sign Out
@@ -125,7 +137,17 @@ function App() {
 
       {currentView === 'pos' && <POS isAdmin={isAdmin} />}
       {currentView === 'customers' && isAdmin && <Customers />}
+      {currentView === 'customers' && !isAdmin && (
+        <div className="customers-container" style={{ textAlign: 'center', padding: '40px' }}>
+          <p>Admin access required. Click "Admin Login" and enter password.</p>
+        </div>
+      )}
       {currentView === 'admin' && isAdmin && <AdminPanel />}
+      {currentView === 'admin' && !isAdmin && (
+        <div className="customers-container" style={{ textAlign: 'center', padding: '40px' }}>
+          <p>Admin access required. Click "Admin Login" and enter password.</p>
+        </div>
+      )}
     </div>
   )
 }
