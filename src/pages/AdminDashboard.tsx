@@ -71,7 +71,11 @@ function AdminDashboard() {
 
       <div style={{ background: 'white', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         <div style={{ padding: '16px', borderBottom: '1px solid #e5e7eb', fontWeight: 'bold' }}>Daily Sales Records</div>
-        <div style={{ overflowX: 'auto' }}>
+        {dailySales.length === 0 ? (
+          <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
+            No sales data in the last 7 days
+          </div>
+        ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead style={{ background: '#f9fafb' }}>
               <tr>
@@ -90,12 +94,12 @@ function AdminDashboard() {
               ))}
             </tbody>
           </table>
-        </div>
+        )}
       </div>
 
       {lowStockProducts.length > 0 && (
         <div style={{ background: '#fef3c7', borderLeft: '4px solid #f59e0b', padding: '16px', borderRadius: '8px', marginTop: '24px' }}>
-          <h3 style={{ fontWeight: 'bold', marginBottom: '12px' }}>⚠️ Low Stock Alert (≤ 12 units)</h3>
+          <h3 style={{ fontWeight: 'bold', marginBottom: '12px' }}>Low Stock Alert (≤ 12 units)</h3>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
             {lowStockProducts.map(p => (
               <div key={p.id} style={{ background: 'white', padding: '4px 12px', borderRadius: '16px', fontSize: '12px' }}>
