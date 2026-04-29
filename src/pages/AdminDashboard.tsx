@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { toast, Toaster } from 'react-hot-toast'
 
 interface Invoice {
   id: string
@@ -26,13 +27,15 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
   const [loading, setLoading] = useState(true)
   const [expandedDate, setExpandedDate] = useState<string | null>(null)
   const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null)
-  const [selectedDateInvoices, setSelectedDateInvoices] = useState<Invoice[]>([])
   const [customerPurchases, setCustomerPurchases] = useState<any[]>([])
   const [showOutstandingModal, setShowOutstandingModal] = useState(false)
   const [selectedCustomerForPayment, setSelectedCustomerForPayment] = useState<any>(null)
   const [paymentAmount, setPaymentAmount] = useState('')
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
   const [showInvoiceModal, setShowInvoiceModal] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [invoiceToDelete, setInvoiceToDelete] = useState<any>(null)
+  const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false)
 
   useEffect(() => {
     fetchData()
@@ -40,13 +43,9 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
 
   async function fetchData() {
     try {
-      const sevenDaysAgo = new Date()
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-      
       const { data: invoices } = await supabase
         .from('invoices')
         .select('*')
-        .gte('created_at', sevenDaysAgo.toISOString())
         .order('created_at', { ascending: false })
 
       if (invoices && invoices.length > 0) {
@@ -141,7 +140,7 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
 
   async function clearOutstandingPayment(customerId: string, customerName: string, amount: number) {
     if (!paymentAmount || parseFloat(paymentAmount) <= 0) {
-      alert('Enter valid payment amount')
+      toast.error('Enter valid payment amount')
       return
     }
     
@@ -154,11 +153,42 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
       .eq('id', customerId)
     
     if (error) {
-      alert('Error updating payment')
+      toast.error('Error updating payment')
     } else {
-      alert(`Payment of ₦${payment.toLocaleString()} recorded. New outstanding: ₦${Math.max(0, newOutstanding).toLocaleString()}`)
+      toast.success(`Payment of ₦${payment.toLocaleString()} recorded. New outstanding: ₦${Math.max(0, newOutstanding).toLocaleString()}`)
       setShowOutstandingModal(false)
       setPaymentAmount('')
+      fetchData()
+    }
+  }
+
+  async function deleteInvoice(invoiceId: string) {
+    const { error } = await supabase
+      .from('invoices')
+      .delete()
+      .eq('id', invoiceId)
+    
+    if (error) {
+      toast.error('Error deleting invoice: ' + error.message)
+    } else {
+      toast.success('Invoice deleted successfully')
+      setShowDeleteConfirm(false)
+      setInvoiceToDelete(null)
+      fetchData()
+    }
+  }
+
+  async function deleteAllInvoices() {
+    const { error } = await supabase
+      .from('invoices')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000')
+    
+    if (error) {
+      toast.error('Error deleting invoices: ' + error.message)
+    } else {
+      toast.success('All invoices deleted successfully')
+      setShowDeleteAllConfirm(false)
       fetchData()
     }
   }
@@ -173,7 +203,6 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
       setExpandedDate(null)
     } else {
       setExpandedDate(date)
-      setSelectedDateInvoices(invoices)
     }
   }
 
@@ -186,6 +215,18 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
 
   return (
     <div>
+      <Toaster position="top-right" />
+      
+      {/* Delete All Invoices Button */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
+        <button
+          onClick={() => setShowDeleteAllConfirm(true)}
+          style={{ background: '#dc2626', color: 'white', padding: '8px 16px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '13px' }}
+        >
+          🗑️ Delete All Invoices
+        </button>
+      </div>
+
       {/* Stats Cards */}
       <div style={{ 
         display: 'grid', 
@@ -194,34 +235,16 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
         marginBottom: '20px' 
       }}>
         <div style={{ background: 'white', padding: '16px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-          <div style={{ fontSize: '12px', color: '#6b7280' }}>📊 7-Day Sales</div>
-          <div style={{ fontSize: '22px', fontWeight: 'bold', color: '#22c55e' }}>₦{(totalSales / 1000).toFixed(0)}k</div>
+          <div style={{ fontSize: '12px', color: '#6b7280' }}>📊 Total Sales</div>
+          <div style={{ fontSize: '22px', fontWeight: 'bold', color: '#22c55e' }}>₦{totalSales.toLocaleString()}</div>
         </div>
         <div style={{ background: 'white', padding: '16px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
           <div style={{ fontSize: '12px', color: '#6b7280' }}>💰 Outstanding</div>
-          <div style={{ fontSize: '22px', fontWeight: 'bold', color: '#ef4444' }}>₦{(totalOutstanding / 1000).toFixed(0)}k</div>
+          <div style={{ fontSize: '22px', fontWeight: 'bold', color: '#ef4444' }}>₦{totalOutstanding.toLocaleString()}</div>
         </div>
         <div style={{ background: 'white', padding: '16px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
           <div style={{ fontSize: '12px', color: '#6b7280' }}>⚠️ Low Stock</div>
           <div style={{ fontSize: '22px', fontWeight: 'bold', color: '#f59e0b' }}>{lowStockProducts.length}</div>
-        </div>
-      </div>
-
-      {/* Sales Trend Chart */}
-      <div style={{ background: 'white', borderRadius: '12px', padding: '16px', marginBottom: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-        <h3 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '16px' }}>📈 Sales Trend (Last 7 Days)</h3>
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', height: '140px', overflowX: 'auto' }}>
-          {dailySales.slice(0, 7).map((day, idx) => {
-            const maxSale = Math.max(...dailySales.map(d => d.total_sales), 1)
-            const height = (day.total_sales / maxSale) * 100
-            return (
-              <div key={idx} style={{ flex: '1', minWidth: '45px', textAlign: 'center' }}>
-                <div style={{ height: `${height}px`, background: '#22c55e', borderRadius: '4px 4px 0 0', marginBottom: '4px' }} />
-                <div style={{ fontSize: '9px', color: '#6b7280' }}>{day.date.split('/')[0]}/{day.date.split('/')[1]}</div>
-                <div style={{ fontSize: '9px', fontWeight: 'bold' }}>₦{(day.total_sales / 1000).toFixed(0)}k</div>
-              </div>
-            )
-          })}
         </div>
       </div>
 
@@ -305,114 +328,137 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
       {/* Daily Sales Cards */}
       <div style={{ marginBottom: '20px' }}>
         <h3 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '12px' }}>📅 Daily Sales Records</h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {dailySales.map((day, idx) => (
-            <div key={idx} style={{ 
-              background: 'white', 
-              borderRadius: '12px', 
-              overflow: 'hidden',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-              border: '1px solid #e5e7eb'
-            }}>
-              <button
-                onClick={() => toggleDateExpand(day.date, day.invoices)}
-                style={{
-                  width: '100%',
-                  padding: '14px',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: '8px'
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{day.date}</div>
-                  <div style={{ fontSize: '11px', color: '#6b7280' }}>{day.count} orders</div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontWeight: 'bold', fontSize: '16px', color: '#22c55e' }}>₦{(day.total_sales / 1000).toFixed(0)}k</div>
-                  {day.outstanding > 0 && (
-                    <div style={{ fontSize: '10px', color: '#ef4444' }}>₦{(day.outstanding / 1000).toFixed(0)}k outstanding</div>
-                  )}
-                </div>
-                <span style={{ fontSize: '16px', color: '#9ca3af' }}>{expandedDate === day.date ? '▲' : '▼'}</span>
-              </button>
-              
-              {expandedDate === day.date && day.invoices && (
-                <div style={{ padding: '12px', borderTop: '1px solid #e5e7eb', background: '#f9fafb' }}>
-                  <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                    <div><span style={{ fontSize: '12px', color: '#6b7280' }}>Total:</span> <strong>₦{day.total_sales.toLocaleString()}</strong></div>
-                    <div><span style={{ fontSize: '12px', color: '#6b7280' }}>Outstanding:</span> <strong style={{ color: '#ef4444' }}>₦{day.outstanding.toLocaleString()}</strong></div>
-                    <div><span style={{ fontSize: '12px', color: '#6b7280' }}>Orders:</span> <strong>{day.count}</strong></div>
+        {dailySales.length === 0 ? (
+          <div style={{ background: 'white', borderRadius: '12px', padding: '40px', textAlign: 'center', color: '#6b7280' }}>
+            No sales records found. Complete some sales on the POS terminal.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {dailySales.map((day, idx) => (
+              <div key={idx} style={{ 
+                background: 'white', 
+                borderRadius: '12px', 
+                overflow: 'hidden',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                border: '1px solid #e5e7eb'
+              }}>
+                <button
+                  onClick={() => toggleDateExpand(day.date, day.invoices)}
+                  style={{
+                    width: '100%',
+                    padding: '14px',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: '8px'
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{day.date}</div>
+                    <div style={{ fontSize: '11px', color: '#6b7280' }}>{day.count} orders</div>
                   </div>
-                  
-                  <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '8px' }}>📋 Invoices (click to view details)</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '400px', overflowY: 'auto' }}>
-                    {day.invoices.map((invoice: any, invIdx: number) => (
-                      <button
-                        key={invIdx}
-                        onClick={() => openInvoiceModal(invoice)}
-                        style={{
-                          background: 'white',
-                          borderRadius: '8px',
-                          padding: '12px',
-                          border: '1px solid #e5e7eb',
-                          cursor: 'pointer',
-                          textAlign: 'left',
-                          width: '100%'
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-                          <div>
-                            <div style={{ fontWeight: 'bold', fontSize: '13px' }}>{invoice.invoice_number}</div>
-                            <div 
-                              style={{ 
-                                fontSize: '11px', 
-                                color: invoice.customer_name !== 'Walk-in Customer' ? '#3b82f6' : '#6b7280',
-                                textDecoration: invoice.customer_name !== 'Walk-in Customer' ? 'underline' : 'none',
-                                cursor: invoice.customer_name !== 'Walk-in Customer' ? 'pointer' : 'default'
-                              }}
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                if (invoice.customer_name !== 'Walk-in Customer' && invoice.customer_id && onViewCustomer) {
-                                  onViewCustomer(invoice.customer_id)
-                                }
-                              }}
-                            >
-                              👤 {invoice.customer_name}
-                              {invoice.customer_name !== 'Walk-in Customer' && ' 🔍'}
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontWeight: 'bold', fontSize: '16px', color: '#22c55e' }}>₦{day.total_sales.toLocaleString()}</div>
+                    {day.outstanding > 0 && (
+                      <div style={{ fontSize: '10px', color: '#ef4444' }}>₦{day.outstanding.toLocaleString()} outstanding</div>
+                    )}
+                  </div>
+                  <span style={{ fontSize: '16px', color: '#9ca3af' }}>{expandedDate === day.date ? '▲' : '▼'}</span>
+                </button>
+                
+                {expandedDate === day.date && day.invoices && (
+                  <div style={{ padding: '12px', borderTop: '1px solid #e5e7eb', background: '#f9fafb' }}>
+                    <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                      <div><span style={{ fontSize: '12px', color: '#6b7280' }}>Total:</span> <strong>₦{day.total_sales.toLocaleString()}</strong></div>
+                      <div><span style={{ fontSize: '12px', color: '#6b7280' }}>Outstanding:</span> <strong style={{ color: '#ef4444' }}>₦{day.outstanding.toLocaleString()}</strong></div>
+                      <div><span style={{ fontSize: '12px', color: '#6b7280' }}>Orders:</span> <strong>{day.count}</strong></div>
+                    </div>
+                    
+                    <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '8px' }}>📋 Invoices</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '400px', overflowY: 'auto' }}>
+                      {day.invoices.map((invoice: any, invIdx: number) => (
+                        <div
+                          key={invIdx}
+                          style={{
+                            background: 'white',
+                            borderRadius: '8px',
+                            padding: '12px',
+                            border: '1px solid #e5e7eb'
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: 'bold', fontSize: '13px' }}>{invoice.invoice_number}</div>
+                              <div 
+                                style={{ 
+                                  fontSize: '11px', 
+                                  color: invoice.customer_name !== 'Walk-in Customer' ? '#3b82f6' : '#6b7280',
+                                  textDecoration: invoice.customer_name !== 'Walk-in Customer' ? 'underline' : 'none',
+                                  cursor: invoice.customer_name !== 'Walk-in Customer' ? 'pointer' : 'default'
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  if (invoice.customer_name !== 'Walk-in Customer' && invoice.customer_id && onViewCustomer) {
+                                    onViewCustomer(invoice.customer_id)
+                                  }
+                                }}
+                              >
+                                👤 {invoice.customer_name}
+                                {invoice.customer_name !== 'Walk-in Customer' && ' 🔍'}
+                              </div>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontWeight: 'bold', fontSize: '14px', color: '#22c55e' }}>₦{invoice.total.toLocaleString()}</div>
+                              <div style={{ fontSize: '10px', color: invoice.payment_method === 'outstanding' ? '#ef4444' : '#6b7280' }}>
+                                {invoice.payment_method}
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  openInvoiceModal(invoice)
+                                }}
+                                style={{ background: '#3b82f6', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '10px', border: 'none', cursor: 'pointer' }}
+                              >
+                                View
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setInvoiceToDelete(invoice)
+                                  setShowDeleteConfirm(true)
+                                }}
+                                style={{ background: '#ef4444', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '10px', border: 'none', cursor: 'pointer' }}
+                              >
+                                Delete
+                              </button>
                             </div>
                           </div>
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontWeight: 'bold', fontSize: '14px', color: '#22c55e' }}>₦{invoice.total.toLocaleString()}</div>
-                            <div style={{ fontSize: '10px', color: invoice.payment_method === 'outstanding' ? '#ef4444' : '#6b7280' }}>
-                              {invoice.payment_method}
-                            </div>
+                          <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                            {invoice.items && invoice.items.slice(0, 2).map((item: any, itemIdx: number) => (
+                              <span key={itemIdx} style={{ background: '#f3f4f6', padding: '2px 8px', borderRadius: '12px', fontSize: '10px' }}>
+                                {item.name} x{item.quantity}
+                              </span>
+                            ))}
+                            {invoice.items && invoice.items.length > 2 && (
+                              <span style={{ fontSize: '10px', color: '#6b7280' }}>+{invoice.items.length - 2} more</span>
+                            )}
                           </div>
                         </div>
-                        <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                          {invoice.items && invoice.items.slice(0, 2).map((item: any, itemIdx: number) => (
-                            <span key={itemIdx} style={{ background: '#f3f4f6', padding: '2px 8px', borderRadius: '12px', fontSize: '10px' }}>
-                              {item.name} x{item.quantity}
-                            </span>
-                          ))}
-                          {invoice.items && invoice.items.length > 2 && (
-                            <span style={{ fontSize: '10px', color: '#6b7280' }}>+{invoice.items.length - 2} more</span>
-                          )}
-                        </div>
-                      </button>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Low Stock Alerts */}
@@ -526,6 +572,63 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
               <button
                 onClick={() => setShowOutstandingModal(false)}
                 style={{ flex: 1, background: '#e5e7eb', padding: '10px', borderRadius: '6px', border: 'none', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Single Invoice Confirmation Modal */}
+      {showDeleteConfirm && invoiceToDelete && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ width: '320px' }}>
+            <h2 className="modal-title">Delete Invoice</h2>
+            <p>Are you sure you want to delete invoice <strong>{invoiceToDelete.invoice_number}</strong>?</p>
+            <p style={{ fontSize: '12px', color: '#ef4444', marginTop: '8px' }}>
+              This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
+              <button
+                onClick={() => deleteInvoice(invoiceToDelete.id)}
+                style={{ flex: 1, background: '#ef4444', color: 'white', padding: '8px', borderRadius: '6px', border: 'none', cursor: 'pointer' }}
+              >
+                Yes, Delete
+              </button>
+              <button
+                onClick={() => {
+                  setShowDeleteConfirm(false)
+                  setInvoiceToDelete(null)
+                }}
+                style={{ flex: 1, background: '#e5e7eb', padding: '8px', borderRadius: '6px', border: 'none', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete All Invoices Confirmation Modal */}
+      {showDeleteAllConfirm && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ width: '350px' }}>
+            <h2 className="modal-title">Delete All Invoices</h2>
+            <p>Are you sure you want to delete <strong>ALL</strong> invoices?</p>
+            <p style={{ fontSize: '12px', color: '#ef4444', marginTop: '8px' }}>
+              This action cannot be undone. All sales records will be permanently deleted.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
+              <button
+                onClick={deleteAllInvoices}
+                style={{ flex: 1, background: '#ef4444', color: 'white', padding: '8px', borderRadius: '6px', border: 'none', cursor: 'pointer' }}
+              >
+                Yes, Delete All
+              </button>
+              <button
+                onClick={() => setShowDeleteAllConfirm(false)}
+                style={{ flex: 1, background: '#e5e7eb', padding: '8px', borderRadius: '6px', border: 'none', cursor: 'pointer' }}
               >
                 Cancel
               </button>
