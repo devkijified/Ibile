@@ -229,69 +229,61 @@ function POS({ isAdmin = false }: POSProps) {
   })
 
   return (
-    <div className="pos-layout">
+    <div className="pos-layout" style={{ paddingTop: '0px' }}>
       <Toaster position="top-right" />
       
-      {/* Welcome Header */}
+      {/* Welcome Bar - Small, non-intrusive */}
       <div style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        zIndex: 50,
         background: 'linear-gradient(135deg, #1e3c2c 0%, #2d5a3f 100%)',
         color: 'white',
-        padding: '10px 20px',
+        padding: '8px 20px',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
+        fontSize: '13px'
       }}>
         <div>
-          <div style={{ fontSize: '12px', opacity: 0.9 }}>Welcome back,</div>
-          <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{userName || 'Staff'}</div>
+          Welcome, <strong>{userName || 'Staff'}</strong> ({isAdmin ? 'Admin' : 'Cashier'})
         </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: '12px', opacity: 0.9 }}>{currentDate}</div>
-          <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{currentTime}</div>
+        <div>
+          {currentDate} | {currentTime}
         </div>
       </div>
       
       {/* VAT Toggle Button */}
-      <div style={{ position: 'fixed', top: '70px', right: '16px', zIndex: 45 }}>
+      <div style={{ position: 'absolute', top: '60px', right: '16px', zIndex: 45 }}>
         <button
           onClick={() => setShowVatToggle(!showVatToggle)}
           style={{
             background: vatEnabled ? '#22c55e' : '#ef4444',
             color: 'white',
-            padding: '6px 14px',
-            borderRadius: '20px',
-            fontSize: '12px',
+            padding: '4px 12px',
+            borderRadius: '16px',
+            fontSize: '11px',
             fontWeight: 'bold',
             border: 'none',
-            cursor: 'pointer',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+            cursor: 'pointer'
           }}
         >
-          {vatEnabled ? '✓ VAT ON (5%)' : '✗ VAT OFF'}
+          {vatEnabled ? 'VAT ON (5%)' : 'VAT OFF'}
         </button>
       </div>
 
       {/* VAT Toggle Panel */}
       {showVatToggle && (
         <div style={{
-          position: 'fixed',
-          top: '105px',
+          position: 'absolute',
+          top: '95px',
           right: '16px',
           zIndex: 45,
           background: 'white',
-          padding: '16px',
+          padding: '12px',
           borderRadius: '8px',
           boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
           borderLeft: `4px solid ${vatEnabled ? '#22c55e' : '#ef4444'}`,
-          minWidth: '220px'
+          minWidth: '200px'
         }}>
-          <h4 style={{ margin: '0 0 12px 0', fontSize: '14px' }}>VAT Control</h4>
+          <h4 style={{ margin: '0 0 10px 0', fontSize: '13px' }}>VAT Control</h4>
           <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
             <input
               type="checkbox"
@@ -309,19 +301,19 @@ function POS({ isAdmin = false }: POSProps) {
                 }
               }}
             />
-            <span style={{ fontSize: '14px' }}>Enable VAT (5%)</span>
+            <span style={{ fontSize: '13px' }}>Enable VAT (5%)</span>
           </label>
           <button
             onClick={() => setShowVatToggle(false)}
             style={{
               width: '100%',
-              marginTop: '12px',
-              padding: '6px',
+              marginTop: '10px',
+              padding: '5px',
               background: '#e5e7eb',
               border: 'none',
               borderRadius: '4px',
               cursor: 'pointer',
-              fontSize: '12px'
+              fontSize: '11px'
             }}
           >
             Close
@@ -330,8 +322,8 @@ function POS({ isAdmin = false }: POSProps) {
       )}
       
       {/* Tabs Bar */}
-      <div style={{ position: 'fixed', top: '70px', left: 0, right: 0, zIndex: 40, background: 'white', borderBottom: '1px solid #e5e7eb' }}>
-        <div style={{ display: 'flex', overflowX: 'auto', padding: '0 16px' }}>
+      <div style={{ background: 'white', borderBottom: '1px solid #e5e7eb', padding: '0 16px' }}>
+        <div style={{ display: 'flex', overflowX: 'auto' }}>
           {tabs.map(tab => (
             <div key={tab.id} style={{ display: 'flex', alignItems: 'center', borderRight: '1px solid #e5e7eb' }}>
               <button
@@ -369,34 +361,42 @@ function POS({ isAdmin = false }: POSProps) {
       </div>
 
       {activeTab ? (
-        <>
+        <div style={{ display: 'flex', minHeight: 'calc(100vh - 120px)' }}>
           {/* Products Section */}
-          <div className="products-section" style={{ marginTop: '125px' }}>
-            <div className="search-bar">
+          <div style={{ flex: 1, padding: '20px' }}>
+            <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
               <input
                 type="text"
                 placeholder="Search products..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="search-input"
+                style={{ flex: 1, padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '8px' }}
               />
-              <select value={category} onChange={(e) => setCategory(e.target.value)} className="category-select">
+              <select value={category} onChange={(e) => setCategory(e.target.value)} style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '8px', background: 'white' }}>
                 {categories.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
 
-            <div className="products-grid">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px' }}>
               {filteredProducts.map(product => (
                 <button 
                   key={product.id} 
                   onClick={() => addToCart(product)} 
-                  className="product-card" 
                   disabled={product.stock <= 0}
-                  style={{ opacity: product.stock <= 0 ? 0.5 : 1, cursor: product.stock <= 0 ? 'not-allowed' : 'pointer' }}
+                  style={{
+                    background: 'white',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                    textAlign: 'left',
+                    border: 'none',
+                    cursor: product.stock <= 0 ? 'not-allowed' : 'pointer',
+                    opacity: product.stock <= 0 ? 0.5 : 1
+                  }}
                 >
-                  <div className="product-name">{product.name}</div>
-                  <div className="product-price">₦{product.price.toLocaleString()}</div>
-                  <div className={product.stock <= 5 ? 'product-stock product-stock-low' : 'product-stock'}>
+                  <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '4px' }}>{product.name}</div>
+                  <div style={{ color: '#22c55e', fontWeight: 'bold' }}>₦{product.price.toLocaleString()}</div>
+                  <div style={{ fontSize: '11px', color: product.stock <= 5 ? '#ef4444' : '#6b7280' }}>
                     Stock: {product.stock}
                   </div>
                 </button>
@@ -405,13 +405,13 @@ function POS({ isAdmin = false }: POSProps) {
           </div>
 
           {/* Cart Section */}
-          <div className="cart-section">
-            <div className="cart-header">
-              <h2 style={{ fontWeight: 'bold', fontSize: '18px' }}>Current Order</h2>
+          <div style={{ width: '320px', background: 'white', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)', position: 'sticky', top: 0, boxShadow: '-4px 0 6px -1px rgba(0,0,0,0.1)' }}>
+            <div style={{ padding: '16px', borderBottom: '1px solid #e5e7eb' }}>
+              <h2 style={{ fontWeight: 'bold' }}>Current Order</h2>
             </div>
 
-            <div className="cart-customer-section">
-              <label className="cart-label">Customer Name</label>
+            <div style={{ padding: '16px', borderBottom: '1px solid #e5e7eb' }}>
+              <label style={{ fontSize: '12px', fontWeight: '500' }}>Customer Name</label>
               <input
                 type="text"
                 value={activeTab.customerName}
@@ -421,64 +421,64 @@ function POS({ isAdmin = false }: POSProps) {
                     tab.id === activeTab.id ? { ...tab, customerName: newName } : tab
                   ))
                 }}
-                className="cart-input"
+                style={{ width: '100%', padding: '6px', border: '1px solid #d1d5db', borderRadius: '6px', marginTop: '4px' }}
               />
             </div>
 
-            <div className="cart-items">
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
               {activeTab.cart.map(item => (
-                <div key={item.name} className="cart-item">
-                  <div className="cart-item-info">
-                    <div className="cart-item-name">{item.name}</div>
-                    <div className="cart-item-price">₦{item.price.toLocaleString()}</div>
+                <div key={item.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '8px' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 'bold', fontSize: '13px' }}>{item.name}</div>
+                    <div style={{ fontSize: '11px', color: '#6b7280' }}>₦{item.price.toLocaleString()}</div>
                   </div>
-                  <div className="cart-controls">
-                    <button onClick={() => updateQuantity(item.name, -1)} className="quantity-btn">-</button>
-                    <span className="quantity">{item.quantity}</span>
-                    <button onClick={() => updateQuantity(item.name, 1)} className="quantity-btn">+</button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button onClick={() => updateQuantity(item.name, -1)} style={{ width: '24px', height: '24px', background: '#e5e7eb', borderRadius: '4px', border: 'none', cursor: 'pointer' }}>-</button>
+                    <span style={{ width: '24px', textAlign: 'center' }}>{item.quantity}</span>
+                    <button onClick={() => updateQuantity(item.name, 1)} style={{ width: '24px', height: '24px', background: '#e5e7eb', borderRadius: '4px', border: 'none', cursor: 'pointer' }}>+</button>
                   </div>
-                  <div className="cart-total">₦{item.total.toLocaleString()}</div>
-                  <button onClick={() => updateQuantity(item.name, -item.quantity)} className="remove-btn">×</button>
+                  <div style={{ marginLeft: '12px', fontWeight: 'bold', minWidth: '70px', textAlign: 'right' }}>₦{item.total.toLocaleString()}</div>
+                  <button onClick={() => updateQuantity(item.name, -item.quantity)} style={{ marginLeft: '8px', color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>×</button>
                 </div>
               ))}
               {activeTab.cart.length === 0 && (
-                <div style={{ textAlign: 'center', color: '#6b7280', padding: '20px 0' }}>Cart is empty</div>
+                <div style={{ textAlign: 'center', color: '#6b7280', padding: '20px' }}>Cart is empty</div>
               )}
             </div>
 
-            <div className="cart-footer">
-              <div className="totals">
-                <div className="totals-row">
+            <div style={{ padding: '16px', borderTop: '1px solid #e5e7eb' }}>
+              <div style={{ marginBottom: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                   <span>Subtotal</span>
                   <span>₦{activeTab.subtotal.toLocaleString()}</span>
                 </div>
                 {vatEnabled && (
-                  <div className="totals-row">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px', color: '#6b7280' }}>
                     <span>VAT (5%)</span>
                     <span>₦{activeTab.tax.toLocaleString()}</span>
                   </div>
                 )}
-                <div className="totals-row-bold">
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '16px', paddingTop: '8px', borderTop: '1px solid #e5e7eb' }}>
                   <span>Total</span>
                   <span>₦{activeTab.total.toLocaleString()}</span>
                 </div>
               </div>
 
-              <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="payment-select">
+              <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', marginBottom: '12px' }}>
                 <option value="cash">Cash</option>
                 <option value="card">Card</option>
                 <option value="transfer">Transfer</option>
                 <option value="outstanding">Outstanding (Credit)</option>
               </select>
 
-              <button onClick={processSale} disabled={activeTab.cart.length === 0} className="complete-btn">
+              <button onClick={processSale} disabled={activeTab.cart.length === 0} style={{ width: '100%', background: '#22c55e', color: 'white', padding: '10px', borderRadius: '8px', fontWeight: 'bold', border: 'none', cursor: 'pointer', opacity: activeTab.cart.length === 0 ? 0.5 : 1 }}>
                 Complete Sale
               </button>
             </div>
           </div>
-        </>
+        </div>
       ) : (
-        <div style={{ textAlign: 'center', padding: '20px', marginTop: '125px' }}>
+        <div style={{ textAlign: 'center', padding: '40px' }}>
           No active tabs. Click + New Tab to start.
         </div>
       )}
