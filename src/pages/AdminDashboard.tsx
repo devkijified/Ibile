@@ -18,6 +18,9 @@ interface InvoiceDetail {
   created_at: string
   items: any[]
   tab_status: string
+  loyalty_discount: number
+  loyalty_points_earned: number
+  loyalty_points_used: number
 }
 
 interface CustomerPurchase {
@@ -27,6 +30,14 @@ interface CustomerPurchase {
   payment_method: string
   status: string
   items: any[]
+  loyalty_discount: number
+  loyalty_points_earned: number
+  loyalty_points_used: number
+}
+
+interface LoyaltyTier {
+  min_amount: number
+  reward_amount: number
 }
 
 function AdminDashboard() {
@@ -42,13 +53,20 @@ function AdminDashboard() {
   const [expandedSalesCustomer, setExpandedSalesCustomer] = useState<string | null>(null)
   const [invoicesByDate, setInvoicesByDate] = useState<{ [key: string]: InvoiceDetail[] }>({})
   const [customerPurchases, setCustomerPurchases] = useState<{ [key: string]: CustomerPurchase[] }>({})
-  const [customerTotals, setCustomerTotals] = useState<{ [key: string]: { total: number; outstanding: number } }>({})
+  const [customerTotals, setCustomerTotals] = useState<{ [key: string]: { total: number; outstanding: number; loyalty_points: number } }>({})
+  const [customerLoyaltyPoints, setCustomerLoyaltyPoints] = useState<{ [key: string]: number }>({})
+  const [loyaltyTiers, setLoyaltyTiers] = useState<LoyaltyTier[]>([])
   const [showAllLowStock, setShowAllLowStock] = useState(false)
-  const [selectedCustomerDetails, setSelectedCustomerDetails] = useState<any>(null)
 
   useEffect(() => {
     fetchAllData()
+    fetchLoyaltyTiers()
   }, [])
+
+  async function fetchLoyaltyTiers() {
+    const { data } = await supabase.from('loyalty_settings').select('*').order('min_amount')
+    setLoyaltyTiers(data || [])
+  }
 
   async function fetchAllData() {
     setLoading(true)
@@ -114,7 +132,10 @@ function AdminDashboard() {
           payment_method: invoice.payment_method,
           created_at: invoice.created_at,
           items: invoice.items,
-          tab_status: invoice.tab_status
+          tab_status: invoice.tab_status,
+          loyalty_discount: invoice.loyalty_discount || 0,
+          loyalty_points_earned: invoice.loyalty_points_earned || 0,
+          loyalty_points_used: invoice.loyalty_points_used || 0
         })
       })
 
@@ -215,7 +236,6 @@ function AdminDashboard() {
   }
 
   async function fetchCustomerPurchaseHistory(customerName: string, customerId: string, source: string) {
-    // Close other expanded customers based on source
     if (source === 'top') {
       setExpandedCustomer(expandedCustomer === customerName ? null : customerName)
       setExpandedSalesCustomer(null)
@@ -224,7 +244,6 @@ function AdminDashboard() {
       setExpandedCustomer(null)
     }
 
-    // If already loaded, just toggle
     if (customerPurchases[customerName]) {
       return
     }
@@ -236,7 +255,7 @@ function AdminDashboard() {
       .order('created_at', { ascending: false })
       .limit(50)
 
-    if (customerId && customerId !== 'walk-in') {
+    if (customerId && customerId !== 'walk-in' && customerId !== 'null') {
       query = supabase
         .from('invoices')
         .select('*')
@@ -254,20 +273,23 @@ function AdminDashboard() {
         total: inv.total,
         payment_method: inv.payment_method,
         status: inv.tab_status || (inv.payment_method === 'outstanding' ? 'outstanding' : 'paid'),
-        items: inv.items
+        items: inv.items,
+        loyalty_discount: inv.loyalty_discount || 0,
+        loyalty_points_earned: inv.loyalty_points_earned || 0,
+        loyalty_points_used: inv.loyalty_points_used || 0
       }))
       
       const totalSpent = purchases.reduce((sum, p) => sum + p.total, 0)
       const totalOutstanding = purchases
         .filter(p => p.status === 'outstanding')
         .reduce((sum, p) => sum + p.total, 0)
+      const totalLoyaltyPoints = purchases.reduce((sum, p) => sum + (p.loyalty_points_earned || 0) - (p.loyalty_points_used || 0), 0)
       
       setCustomerPurchases(prev => ({ ...prev, [customerName]: purchases }))
       setCustomerTotals(prev => ({ 
         ...prev, 
-        [customerName]: { total: totalSpent, outstanding: totalOutstanding } 
+        [customerName]: { total: totalSpent, outstanding: totalOutstanding, loyalty_points: totalLoyaltyPoints } 
       }))
-      setSelectedCustomerDetails({ name: customerName, id: customerId })
     } else {
       setCustomerPurchases(prev => ({ ...prev, [customerName]: [] }))
     }
@@ -286,6 +308,11 @@ function AdminDashboard() {
     } catch (err) {
       console.error('Error fetching low stock:', err)
     }
+  }
+
+  const getLoyaltyReward = (amount: number): number => {
+    const tier = [...loyaltyTiers].reverse().find(t => amount >= t.min_amount)
+    return tier ? tier.reward_amount : 0
   }
 
   const handleDateSelect = async (date: string) => {
@@ -323,7 +350,6 @@ function AdminDashboard() {
 
   const displayedLowStock = showAllLowStock ? lowStockProducts : lowStockProducts.slice(0, 6)
 
-  // Chart data - get last 7 days sales
   const chartData = dailySales.slice(0, 7).reverse()
   const maxSale = Math.max(...chartData.map(d => d.total_sales), 1)
 
@@ -429,12 +455,12 @@ function AdminDashboard() {
                   </span>
                 </button>
                 
-                {/* Customer Purchase History */}
                 {expandedCustomer === customer.name && customerPurchases[customer.name] && (
                   <CustomerHistory 
                     customerName={customer.name} 
                     purchases={customerPurchases[customer.name]} 
-                    totals={customerTotals[customer.name]} 
+                    totals={customerTotals[customer.name]}
+                    loyaltyTiers={loyaltyTiers}
                   />
                 )}
               </div>
@@ -443,7 +469,7 @@ function AdminDashboard() {
         )}
       </div>
 
-      {/* Daily Sales Records - With Clickable Customers */}
+      {/* Daily Sales Records */}
       <div style={{ marginBottom: '20px' }}>
         <h3 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '12px' }}>📅 Daily Sales Records</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -488,7 +514,6 @@ function AdminDashboard() {
                   <span style={{ fontSize: '18px', color: '#9ca3af' }}>{isExpanded ? '▲' : '▼'}</span>
                 </button>
                 
-                {/* Expanded Details */}
                 {isExpanded && (
                   <div style={{ padding: '12px', borderTop: '1px solid #e5e7eb', background: '#f9fafb' }}>
                     <div style={{ marginBottom: '12px' }}>
@@ -508,11 +533,11 @@ function AdminDashboard() {
                       </div>
                     </div>
                     
-                    {/* Customers for this day - Clickable */}
+                    {/* Clickable Customers for this day */}
                     {selectedCustomers.length > 0 && selectedDate === day.date && (
                       <div style={{ marginBottom: '16px' }}>
                         <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '8px', color: '#4b5563' }}>
-                          👥 Top Customers Today (Min ₦50K)
+                          👥 Top Customers Today (Click to view history)
                         </div>
                         {selectedCustomers.map((customer, idx) => (
                           <div key={idx}>
@@ -538,30 +563,25 @@ function AdminDashboard() {
                                 ₦{customer.total.toLocaleString()}
                               </span>
                             </button>
-                            {/* Customer Purchase History from Sales Record */}
                             {expandedSalesCustomer === customer.name && customerPurchases[customer.name] && (
                               <div style={{ marginLeft: '12px', marginBottom: '8px' }}>
                                 <CustomerHistory 
                                   customerName={customer.name} 
                                   purchases={customerPurchases[customer.name]} 
-                                  totals={customerTotals[customer.name]} 
+                                  totals={customerTotals[customer.name]}
+                                  loyaltyTiers={loyaltyTiers}
                                 />
                               </div>
                             )}
                           </div>
                         ))}
-                        {selectedCustomers.length === 0 && (
-                          <div style={{ fontSize: '12px', color: '#6b7280', textAlign: 'center', padding: '12px' }}>
-                            No customers with ₦50,000+ sales on this day
-                          </div>
-                        )}
                       </div>
                     )}
                     
-                    {/* Invoice Records */}
+                    {/* Invoice Records - Clickable Customer Names */}
                     <div style={{ marginTop: '12px' }}>
                       <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '8px', color: '#4b5563' }}>
-                        📋 Invoice Records ({dayInvoices.length})
+                        📋 Invoice Records
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         {dayInvoices.map(invoice => (
@@ -579,46 +599,52 @@ function AdminDashboard() {
                                 background: 'none',
                                 border: 'none',
                                 cursor: 'pointer',
-                                textAlign: 'left',
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                flexWrap: 'wrap',
-                                gap: '6px'
+                                textAlign: 'left'
                               }}
                             >
-                              <div>
-                                <div style={{ fontWeight: 'bold', fontSize: '12px' }}>{invoice.invoice_number}</div>
-                                <div 
-                                  style={{ 
-                                    fontSize: '10px', 
-                                    color: '#3b82f6',
-                                    textDecoration: 'underline',
-                                    cursor: invoice.customer_name !== 'Walk-in Customer' ? 'pointer' : 'default'
-                                  }}
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    if (invoice.customer_name !== 'Walk-in Customer') {
-                                      fetchCustomerPurchaseHistory(invoice.customer_name, invoice.customer_id, 'sales')
-                                    }
-                                  }}
-                                >
-                                  {invoice.customer_name.length > 25 ? invoice.customer_name.substring(0, 22) + '...' : invoice.customer_name}
-                                  {invoice.customer_name !== 'Walk-in Customer' && ' 🔍'}
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                                <div>
+                                  <div style={{ fontWeight: 'bold', fontSize: '12px' }}>{invoice.invoice_number}</div>
+                                  <div 
+                                    style={{ 
+                                      fontSize: '10px', 
+                                      color: invoice.customer_name !== 'Walk-in Customer' ? '#3b82f6' : '#6b7280',
+                                      textDecoration: invoice.customer_name !== 'Walk-in Customer' ? 'underline' : 'none',
+                                      cursor: invoice.customer_name !== 'Walk-in Customer' ? 'pointer' : 'default'
+                                    }}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      if (invoice.customer_name !== 'Walk-in Customer' && invoice.customer_name) {
+                                        fetchCustomerPurchaseHistory(invoice.customer_name, invoice.customer_id, 'sales')
+                                      }
+                                    }}
+                                  >
+                                    {invoice.customer_name.length > 25 ? invoice.customer_name.substring(0, 22) + '...' : invoice.customer_name}
+                                    {invoice.customer_name !== 'Walk-in Customer' && ' 🔍'}
+                                  </div>
                                 </div>
-                              </div>
-                              <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontWeight: 'bold', fontSize: '13px', color: '#22c55e' }}>₦{invoice.total.toLocaleString()}</div>
-                                <div style={{ fontSize: '9px', color: invoice.payment_method === 'outstanding' ? '#ef4444' : '#6b7280' }}>
-                                  {invoice.payment_method}
+                                <div style={{ textAlign: 'right' }}>
+                                  <div style={{ fontWeight: 'bold', fontSize: '13px', color: '#22c55e' }}>₦{invoice.total.toLocaleString()}</div>
+                                  <div style={{ fontSize: '9px', color: invoice.payment_method === 'outstanding' ? '#ef4444' : '#6b7280' }}>
+                                    {invoice.payment_method}
+                                  </div>
                                 </div>
+                                <span style={{ fontSize: '14px', color: '#9ca3af' }}>{expandedInvoice === invoice.id ? '▲' : '▼'}</span>
                               </div>
-                              <span style={{ fontSize: '14px', color: '#9ca3af' }}>{expandedInvoice === invoice.id ? '▲' : '▼'}</span>
                             </button>
                             
-                            {/* Expanded Invoice Items */}
                             {expandedInvoice === invoice.id && (
                               <div style={{ padding: '10px', borderTop: '1px solid #e5e7eb', background: '#f9fafb' }}>
+                                {invoice.loyalty_discount > 0 && (
+                                  <div style={{ marginBottom: '8px', padding: '6px', background: '#fef3c7', borderRadius: '4px', fontSize: '11px' }}>
+                                    🎟️ Loyalty Discount: ₦{invoice.loyalty_discount.toLocaleString()}
+                                  </div>
+                                )}
+                                {invoice.loyalty_points_earned > 0 && (
+                                  <div style={{ marginBottom: '8px', fontSize: '11px', color: '#22c55e' }}>
+                                    ✨ Points Earned: {invoice.loyalty_points_earned}
+                                  </div>
+                                )}
                                 <div style={{ fontSize: '11px', fontWeight: 'bold', marginBottom: '6px' }}>Items:</div>
                                 {invoice.items && invoice.items.map((item: any, idx: number) => (
                                   <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', padding: '4px 0' }}>
@@ -687,9 +713,27 @@ function AdminDashboard() {
   )
 }
 
-// Customer History Component
-function CustomerHistory({ customerName, purchases, totals }: { customerName: string; purchases: CustomerPurchase[]; totals: { total: number; outstanding: number } }) {
+// Customer History Component with Loyalty Display
+function CustomerHistory({ customerName, purchases, totals, loyaltyTiers }: { 
+  customerName: string; 
+  purchases: CustomerPurchase[]; 
+  totals: { total: number; outstanding: number; loyalty_points: number };
+  loyaltyTiers: LoyaltyTier[]
+}) {
   const [expandedPurchase, setExpandedPurchase] = useState<string | null>(null)
+
+  const getNextReward = (points: number): { min_amount: number; reward: number } | null => {
+    if (!loyaltyTiers.length) return null
+    const totalSpent = totals?.total || 0
+    const nextTier = loyaltyTiers.find(t => totalSpent < t.min_amount)
+    if (nextTier) {
+      const amountNeeded = nextTier.min_amount - totalSpent
+      return { min_amount: amountNeeded, reward: nextTier.reward_amount }
+    }
+    return null
+  }
+
+  const nextReward = getNextReward(totals?.loyalty_points || 0)
 
   return (
     <div style={{ marginTop: '8px', background: '#f9fafb', borderRadius: '8px', padding: '12px', border: '1px solid #e5e7eb' }}>
@@ -699,8 +743,14 @@ function CustomerHistory({ customerName, purchases, totals }: { customerName: st
           <div style={{ fontSize: '11px', color: '#6b7280' }}>Purchase History</div>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: '12px', color: '#22c55e' }}>Total: ₦{totals?.total?.toLocaleString() || 0}</div>
+          <div style={{ fontSize: '12px', color: '#22c55e' }}>Total Spent: ₦{totals?.total?.toLocaleString() || 0}</div>
           <div style={{ fontSize: '11px', color: '#ef4444' }}>Outstanding: ₦{totals?.outstanding?.toLocaleString() || 0}</div>
+          <div style={{ fontSize: '11px', color: '#8b5cf6' }}>⭐ Loyalty Points: {totals?.loyalty_points || 0}</div>
+          {nextReward && (
+            <div style={{ fontSize: '10px', color: '#f59e0b' }}>
+              🎯 Spend ₦{nextReward.min_amount.toLocaleString()} more to get ₦{nextReward.reward} off
+            </div>
+          )}
         </div>
       </div>
       
@@ -726,12 +776,22 @@ function CustomerHistory({ customerName, purchases, totals }: { customerName: st
                 {purchase.items && purchase.items.length > 0 && (
                   <button
                     onClick={() => setExpandedPurchase(expandedPurchase === purchase.invoice_number ? null : purchase.invoice_number)}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280' }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', fontSize: '11px' }}
                   >
-                    {expandedPurchase === purchase.invoice_number ? '▲ Hide Items' : '▼ Show Items'}
+                    {expandedPurchase === purchase.invoice_number ? '▲ Hide' : '▼ Details'}
                   </button>
                 )}
               </div>
+              {purchase.loyalty_discount > 0 && (
+                <div style={{ marginTop: '6px', fontSize: '10px', color: '#f59e0b' }}>
+                  🎟️ Loyalty discount: ₦{purchase.loyalty_discount.toLocaleString()}
+                </div>
+              )}
+              {purchase.loyalty_points_earned > 0 && (
+                <div style={{ fontSize: '10px', color: '#8b5cf6' }}>
+                  ⭐ Points earned: {purchase.loyalty_points_earned}
+                </div>
+              )}
               {expandedPurchase === purchase.invoice_number && purchase.items && (
                 <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: '1px solid #e5e7eb' }}>
                   <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '4px' }}>Items:</div>
