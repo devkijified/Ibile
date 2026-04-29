@@ -1,526 +1,186 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 
-interface DailySales {
-  date: string
-  total_sales: number
-  outstanding: number
-  invoice_count: number
-}
-
-interface InvoiceDetail {
-  id: string
-  invoice_number: string
-  customer_name: string
-  customer_id: string
-  total: number
-  payment_method: string
-  created_at: string
-  items: any[]
-  tab_status: string
-  loyalty_discount: number
-  loyalty_points_earned: number
-  loyalty_points_used: number
-}
-
 function AdminDashboard() {
-  const [dailySales, setDailySales] = useState<DailySales[]>([])
+  const [dailySales, setDailySales] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedDate, setSelectedDate] = useState<string>('')
   const [lowStockProducts, setLowStockProducts] = useState<any[]>([])
-  const [selectedCustomers, setSelectedCustomers] = useState<any[]>([])
-  const [topCustomers, setTopCustomers] = useState<any[]>([])
-  const [expandedDate, setExpandedDate] = useState<string | null>(null)
-  const [expandedInvoice, setExpandedInvoice] = useState<string | null>(null)
-  const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null)
-  const [invoicesByDate, setInvoicesByDate] = useState<{ [key: string]: InvoiceDetail[] }>({})
-  const [customerPurchases, setCustomerPurchases] = useState<{ [key: string]: any[] }>({})
-  const [showAllLowStock, setShowAllLowStock] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetchAllData()
+    fetchData()
   }, [])
 
-  async function fetchAllData() {
-    setLoading(true)
-    await Promise.all([
-      fetchSalesData(),
-      fetchLowStockAlerts()
-    ])
-    setLoading(false)
-  }
-
-  async function fetchSalesData() {
+  async function fetchData() {
     try {
+      setLoading(true)
+      setError(null)
+      
+      // Fetch invoices from last 7 days
       const sevenDaysAgo = new Date()
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
       
-      const { data: invoices, error } = await supabase
+      const { data: invoices, error: invoicesError } = await supabase
         .from('invoices')
         .select('*')
         .gte('created_at', sevenDaysAgo.toISOString())
         .order('created_at', { ascending: false })
-        .limit(500)
+        .limit(200)
 
-      if (error) {
-        console.error('Error fetching sales:', error)
-        return
-      }
-
-      if (!invoices || invoices.length === 0) {
-        setDailySales([])
-        return
-      }
-
-      const salesByDate: { [key: string]: DailySales } = {}
-      const invoicesGrouped: { [key: string]: InvoiceDetail[] } = {}
-      
-      // Also track customer spending for top customers
-      const customerTotalMap: { [key: string]: { name: string; total: number; customer_id: string } } = {}
-      
-      invoices.forEach(invoice => {
-        const date = new Date(invoice.created_at).toLocaleDateString('en-NG')
+      if (invoicesError) {
+        console.error('Invoices error:', invoicesError)
+        setError(invoicesError.message)
+      } else {
+        console.log('Invoices loaded:', invoices?.length)
         
-        if (!salesByDate[date]) {
-          salesByDate[date] = {
-            date,
-            total_sales: 0,
-            outstanding: 0,
-            invoice_count: 0
-          }
-          invoicesGrouped[date] = []
-        }
-        
-        salesByDate[date].total_sales += invoice.total
-        salesByDate[date].invoice_count += 1
-        
-        if (invoice.payment_method === 'outstanding' || invoice.tab_status === 'outstanding') {
-          salesByDate[date].outstanding += invoice.total
-        }
-        
-        invoicesGrouped[date].push({
-          id: invoice.id,
-          invoice_number: invoice.invoice_number,
-          customer_name: invoice.customer_name,
-          customer_id: invoice.customer_id,
-          total: invoice.total,
-          payment_method: invoice.payment_method,
-          created_at: invoice.created_at,
-          items: invoice.items,
-          tab_status: invoice.tab_status,
-          loyalty_discount: invoice.loyalty_discount || 0,
-          loyalty_points_earned: invoice.loyalty_points_earned || 0,
-          loyalty_points_used: invoice.loyalty_points_used || 0
-        })
-        
-        // Track customer totals for top customers
-        if (invoice.customer_name && invoice.customer_name !== 'Walk-in Customer') {
-          if (!customerTotalMap[invoice.customer_name]) {
-            customerTotalMap[invoice.customer_name] = {
-              name: invoice.customer_name,
-              total: 0,
-              customer_id: invoice.customer_id
+        // Group by date
+        const salesByDate: any = {}
+        invoices?.forEach((inv: any) => {
+          const date = new Date(inv.created_at).toLocaleDateString('en-NG')
+          if (!salesByDate[date]) {
+            salesByDate[date] = {
+              date,
+              total_sales: 0,
+              count: 0
             }
           }
-          customerTotalMap[invoice.customer_name].total += invoice.total
-        }
-      })
-
-      const sortedSales = Object.values(salesByDate).sort((a: any, b: any) => 
-        new Date(b.date).getTime() - new Date(a.date).getTime()
-      )
-
-      setDailySales(sortedSales)
-      setInvoicesByDate(invoicesGrouped)
-      
-      // Set top customers (minimum ₦50,000)
-      const topCust = Object.values(customerTotalMap)
-        .filter(c => c.total >= 50000)
-        .sort((a, b) => b.total - a.total)
-        .slice(0, 10)
-      setTopCustomers(topCust)
-      
-      if (sortedSales.length > 0) {
-        setSelectedDate(sortedSales[0].date)
-        await fetchCustomersForDate(sortedSales[0].date)
-      }
-    } catch (err) {
-      console.error('Error in fetchSalesData:', err)
-    }
-  }
-
-  async function fetchCustomersForDate(date: string) {
-    try {
-      const startDate = new Date(date)
-      const endDate = new Date(date)
-      endDate.setDate(endDate.getDate() + 1)
-      
-      const { data } = await supabase
-        .from('invoices')
-        .select('customer_name, customer_id, total')
-        .gte('created_at', startDate.toISOString())
-        .lt('created_at', endDate.toISOString())
-        .limit(100)
-      
-      if (data && data.length > 0) {
-        const customerMap = new Map()
-        data.forEach(inv => {
-          const existing = customerMap.get(inv.customer_name)
-          if (existing) {
-            existing.total += inv.total
-          } else {
-            customerMap.set(inv.customer_name, { 
-              name: inv.customer_name, 
-              customer_id: inv.customer_id,
-              total: inv.total 
-            })
-          }
+          salesByDate[date].total_sales += inv.total
+          salesByDate[date].count += 1
         })
         
-        const filteredCustomers = Array.from(customerMap.values())
-          .filter(c => c.total >= 50000)
-          .sort((a, b) => b.total - a.total)
-          .slice(0, 10)
-        
-        setSelectedCustomers(filteredCustomers)
-      } else {
-        setSelectedCustomers([])
+        setDailySales(Object.values(salesByDate))
       }
-    } catch (err) {
-      console.error('Error fetching customers:', err)
-    }
-  }
-
-  async function fetchLowStockAlerts() {
-    try {
-      const { data } = await supabase
+      
+      // Fetch low stock products
+      const { data: products, error: productsError } = await supabase
         .from('products')
         .select('id, name, stock')
         .lte('stock', 12)
         .order('stock', { ascending: true })
-        .limit(50)
+        .limit(20)
+
+      if (productsError) {
+        console.error('Products error:', productsError)
+      } else {
+        setLowStockProducts(products || [])
+      }
       
-      setLowStockProducts(data || [])
-    } catch (err) {
-      console.error('Error fetching low stock:', err)
+    } catch (err: any) {
+      console.error('Fetch error:', err)
+      setError(err.message)
+    } finally {
+      setLoading(false)
     }
-  }
-
-  const handleDateSelect = (date: string) => {
-    setSelectedDate(date)
-    setExpandedDate(expandedDate === date ? null : date)
-  }
-
-  const toggleInvoiceExpand = (invoiceId: string) => {
-    setExpandedInvoice(expandedInvoice === invoiceId ? null : invoiceId)
   }
 
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-        <div>Loading dashboard data...</div>
-        <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '8px' }}>Fetching sales records from Supabase</div>
+      <div style={{ padding: '40px', textAlign: 'center' }}>
+        <div>Loading dashboard...</div>
+        <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '8px' }}>Fetching sales data from Supabase</div>
       </div>
     )
   }
 
-  if (dailySales.length === 0) {
+  if (error) {
     return (
-      <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-        <div>No sales data available</div>
-        <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '8px' }}>
-          Complete some sales on the POS terminal to see data here
-        </div>
+      <div style={{ padding: '40px', textAlign: 'center' }}>
+        <div style={{ color: '#ef4444', marginBottom: '8px' }}>Error loading dashboard</div>
+        <div style={{ fontSize: '12px', color: '#6b7280' }}>{error}</div>
+        <button 
+          onClick={() => fetchData()}
+          style={{ marginTop: '16px', padding: '8px 16px', background: '#22c55e', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+        >
+          Retry
+        </button>
       </div>
     )
   }
 
   const totalSales = dailySales.reduce((sum, d) => sum + d.total_sales, 0)
-  const totalOutstanding = dailySales.reduce((sum, d) => sum + d.outstanding, 0)
-
-  const displayedLowStock = showAllLowStock ? lowStockProducts : lowStockProducts.slice(0, 6)
-
-  // Chart data - last 7 days
-  const chartData = [...dailySales].reverse().slice(0, 7)
-  const maxSale = Math.max(...chartData.map(d => d.total_sales), 1)
+  const totalOrders = dailySales.reduce((sum, d) => sum + d.count, 0)
 
   return (
-    <div style={{ padding: '16px', maxWidth: '1200px', margin: '0 auto' }}>
+    <div style={{ padding: '16px' }}>
+      <h1 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '20px' }}>Sales Dashboard</h1>
+      
       {/* Stats Cards */}
       <div style={{ 
         display: 'grid', 
-        gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', 
+        gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', 
         gap: '12px', 
-        marginBottom: '20px' 
+        marginBottom: '24px' 
       }}>
         <div style={{ background: 'white', padding: '16px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-          <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>📊 7-Day Sales</div>
-          <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#22c55e' }}>₦{(totalSales / 1000).toFixed(0)}k</div>
+          <div style={{ fontSize: '12px', color: '#6b7280' }}>7-Day Sales</div>
+          <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#22c55e' }}>₦{totalSales.toLocaleString()}</div>
         </div>
         <div style={{ background: 'white', padding: '16px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-          <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>💰 Outstanding</div>
-          <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#ef4444' }}>₦{(totalOutstanding / 1000).toFixed(0)}k</div>
+          <div style={{ fontSize: '12px', color: '#6b7280' }}>Total Orders</div>
+          <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{totalOrders}</div>
         </div>
         <div style={{ background: 'white', padding: '16px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-          <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>⚠️ Low Stock</div>
+          <div style={{ fontSize: '12px', color: '#6b7280' }}>Low Stock Items</div>
           <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#f59e0b' }}>{lowStockProducts.length}</div>
         </div>
       </div>
 
-      {/* Sales Trend Chart */}
-      <div style={{ background: 'white', borderRadius: '12px', padding: '16px', marginBottom: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-        <h3 style={{ fontSize: '15px', fontWeight: 'bold', marginBottom: '16px' }}>📈 Sales Trend (Last 7 Days)</h3>
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '160px', overflowX: 'auto', paddingBottom: '8px' }}>
-          {chartData.map(day => {
-            const height = (day.total_sales / maxSale) * 120
-            const isSelected = selectedDate === day.date
-            return (
-              <div key={day.date} style={{ flex: '1', minWidth: '55px', textAlign: 'center' }}>
-                <button
-                  onClick={() => handleDateSelect(day.date)}
-                  style={{
-                    width: '100%',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    padding: 0
-                  }}
-                >
-                  <div style={{ 
-                    height: `${Math.max(height, 4)}px`, 
-                    background: isSelected ? '#22c55e' : '#86efac', 
-                    borderRadius: '4px 4px 0 0',
-                    transition: 'height 0.3s ease',
-                    marginBottom: '4px'
-                  }} />
-                  <div style={{ fontSize: '9px', color: isSelected ? '#22c55e' : '#6b7280', fontWeight: isSelected ? 'bold' : 'normal' }}>
-                    {day.date.split('/')[0]}/{day.date.split('/')[1]}
-                  </div>
-                  <div style={{ fontSize: '9px', fontWeight: 'bold' }}>₦{(day.total_sales / 1000).toFixed(0)}k</div>
-                </button>
-              </div>
-            )
-          })}
+      {/* Daily Sales Table */}
+      <div style={{ background: 'white', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', marginBottom: '24px' }}>
+        <div style={{ padding: '16px', borderBottom: '1px solid #e5e7eb', fontWeight: 'bold' }}>
+          Daily Sales Records
         </div>
-      </div>
-
-      {/* Top Customers Section */}
-      <div style={{ background: 'white', borderRadius: '12px', padding: '16px', marginBottom: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-        <h3 style={{ fontSize: '15px', fontWeight: 'bold', marginBottom: '12px' }}>🏆 Top Customers (Min ₦50K / 7 days)</h3>
-        {topCustomers.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '16px', color: '#6b7280', fontSize: '13px' }}>
-            No customers with ₦50,000+ sales in the last 7 days
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {topCustomers.map((customer, idx) => (
-              <div key={idx} style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center',
-                padding: '10px 12px',
-                background: idx < 3 ? '#fef3c7' : '#f9fafb',
-                borderRadius: '8px'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '18px' }}>
-                    {idx === 0 && '🥇'}
-                    {idx === 1 && '🥈'}
-                    {idx === 2 && '🥉'}
-                    {idx > 2 && `${idx + 1}.`}
-                  </span>
-                  <span style={{ fontSize: '14px', fontWeight: idx < 3 ? 'bold' : 'normal' }}>
-                    {customer.name.length > 25 ? customer.name.substring(0, 22) + '...' : customer.name}
-                  </span>
-                </div>
-                <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#22c55e' }}>
-                  ₦{(customer.total / 1000).toFixed(0)}k
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Daily Sales Records */}
-      <div style={{ marginBottom: '20px' }}>
-        <h3 style={{ fontSize: '15px', fontWeight: 'bold', marginBottom: '12px' }}>📅 Daily Sales Records</h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {dailySales.map(day => {
-            const isExpanded = expandedDate === day.date
-            const dayInvoices = invoicesByDate[day.date] || []
-            
-            return (
-              <div key={day.date} style={{ 
-                background: selectedDate === day.date ? '#f0fdf4' : 'white',
-                borderRadius: '12px', 
-                overflow: 'hidden',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                border: selectedDate === day.date ? '1px solid #22c55e' : '1px solid #e5e7eb'
-              }}>
-                <button
-                  onClick={() => handleDateSelect(day.date)}
-                  style={{
-                    width: '100%',
-                    padding: '14px',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    flexWrap: 'wrap',
-                    gap: '8px'
-                  }}
-                >
-                  <div>
-                    <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{day.date}</div>
-                    <div style={{ fontSize: '11px', color: '#6b7280' }}>{day.invoice_count} orders</div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontWeight: 'bold', fontSize: '16px', color: '#22c55e' }}>₦{(day.total_sales / 1000).toFixed(0)}k</div>
-                    {day.outstanding > 0 && (
-                      <div style={{ fontSize: '10px', color: '#ef4444' }}>₦{(day.outstanding / 1000).toFixed(0)}k outstanding</div>
-                    )}
-                  </div>
-                  <span style={{ fontSize: '16px', color: '#9ca3af' }}>{isExpanded ? '▲' : '▼'}</span>
-                </button>
-                
-                {isExpanded && (
-                  <div style={{ padding: '12px', borderTop: '1px solid #e5e7eb', background: '#f9fafb' }}>
-                    <div style={{ marginBottom: '12px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px' }}>
-                        <span>Total Sales:</span>
-                        <span style={{ fontWeight: 'bold', color: '#22c55e' }}>₦{day.total_sales.toLocaleString()}</span>
-                      </div>
-                      {day.outstanding > 0 && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px' }}>
-                          <span>Outstanding:</span>
-                          <span style={{ fontWeight: 'bold', color: '#ef4444' }}>₦{day.outstanding.toLocaleString()}</span>
-                        </div>
-                      )}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
-                        <span>Number of Orders:</span>
-                        <span style={{ fontWeight: 'bold' }}>{day.invoice_count}</span>
-                      </div>
-                    </div>
-                    
-                    {/* Invoice Records */}
-                    <div>
-                      <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '8px', color: '#4b5563' }}>
-                        📋 Invoice Records ({dayInvoices.length})
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {dayInvoices.slice(0, 10).map(invoice => (
-                          <div key={invoice.id} style={{ 
-                            background: 'white', 
-                            borderRadius: '8px', 
-                            overflow: 'hidden',
-                            border: '1px solid #e5e7eb'
-                          }}>
-                            <button
-                              onClick={() => toggleInvoiceExpand(invoice.id)}
-                              style={{
-                                width: '100%',
-                                padding: '10px',
-                                background: 'none',
-                                border: 'none',
-                                cursor: 'pointer',
-                                textAlign: 'left'
-                              }}
-                            >
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-                                <div>
-                                  <div style={{ fontWeight: 'bold', fontSize: '12px' }}>{invoice.invoice_number}</div>
-                                  <div style={{ fontSize: '10px', color: '#6b7280' }}>
-                                    {invoice.customer_name.length > 25 ? invoice.customer_name.substring(0, 22) + '...' : invoice.customer_name}
-                                  </div>
-                                </div>
-                                <div style={{ textAlign: 'right' }}>
-                                  <div style={{ fontWeight: 'bold', fontSize: '13px', color: '#22c55e' }}>₦{invoice.total.toLocaleString()}</div>
-                                  <div style={{ fontSize: '9px', color: invoice.payment_method === 'outstanding' ? '#ef4444' : '#6b7280' }}>
-                                    {invoice.payment_method}
-                                  </div>
-                                </div>
-                                <span style={{ fontSize: '12px', color: '#9ca3af' }}>{expandedInvoice === invoice.id ? '▲' : '▼'}</span>
-                              </div>
-                            </button>
-                            
-                            {expandedInvoice === invoice.id && (
-                              <div style={{ padding: '10px', borderTop: '1px solid #e5e7eb', background: '#f9fafb' }}>
-                                {invoice.loyalty_discount > 0 && (
-                                  <div style={{ marginBottom: '8px', fontSize: '11px', color: '#f59e0b' }}>
-                                    🎟️ Loyalty Discount: ₦{invoice.loyalty_discount.toLocaleString()}
-                                  </div>
-                                )}
-                                <div style={{ fontSize: '11px', fontWeight: 'bold', marginBottom: '6px' }}>Items:</div>
-                                {invoice.items && invoice.items.map((item: any, idx: number) => (
-                                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', padding: '4px 0' }}>
-                                    <span>{item.name} x{item.quantity}</span>
-                                    <span>₦{(item.price * item.quantity).toLocaleString()}</span>
-                                  </div>
-                                ))}
-                                <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 'bold' }}>
-                                  <span>Total</span>
-                                  <span>₦{invoice.total.toLocaleString()}</span>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                        {dayInvoices.length > 10 && (
-                          <div style={{ textAlign: 'center', padding: '8px', fontSize: '11px', color: '#6b7280' }}>
-                            +{dayInvoices.length - 10} more orders
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )
-          })}
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead style={{ background: '#f9fafb' }}>
+              <tr>
+                <th style={{ padding: '12px', textAlign: 'left' }}>Date</th>
+                <th style={{ padding: '12px', textAlign: 'right' }}>Total Sales</th>
+                <th style={{ padding: '12px', textAlign: 'right' }}>Orders</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dailySales.length === 0 ? (
+                <tr>
+                  <td colSpan={3} style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
+                    No sales data in the last 7 days
+                  </td>
+                </tr>
+              ) : (
+                dailySales.map((day, idx) => (
+                  <tr key={idx} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                    <td style={{ padding: '12px', fontWeight: 'bold' }}>{day.date}</td>
+                    <td style={{ padding: '12px', textAlign: 'right', color: '#22c55e', fontWeight: 'bold' }}>
+                      ₦{day.total_sales.toLocaleString()}
+                    </td>
+                    <td style={{ padding: '12px', textAlign: 'right' }}>{day.count}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
       {/* Low Stock Alerts */}
       {lowStockProducts.length > 0 && (
         <div style={{ background: '#fef3c7', borderLeft: '4px solid #f59e0b', padding: '16px', borderRadius: '8px' }}>
-          <h3 style={{ fontWeight: 'bold', marginBottom: '12px', fontSize: '13px', color: '#92400e' }}>
-            ⚠️ Low Stock Alert ({lowStockProducts.length} items)
+          <h3 style={{ fontWeight: 'bold', marginBottom: '12px', fontSize: '14px', color: '#92400e' }}>
+            ⚠️ Low Stock Alert (≤ 12 units)
           </h3>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-            {displayedLowStock.map(product => (
+            {lowStockProducts.map(product => (
               <div key={product.id} style={{ 
                 background: 'white', 
-                padding: '4px 12px', 
+                padding: '6px 12px', 
                 borderRadius: '16px', 
                 fontSize: '12px',
                 boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
               }}>
-                {product.name.length > 20 ? product.name.substring(0, 18) + '...' : product.name}: 
-                <strong style={{ color: product.stock <= 5 ? '#ef4444' : '#f59e0b' }}>{product.stock} left</strong>
+                {product.name}: <strong style={{ color: product.stock <= 5 ? '#ef4444' : '#f59e0b' }}>{product.stock} left</strong>
               </div>
             ))}
           </div>
-          {lowStockProducts.length > 6 && (
-            <button
-              onClick={() => setShowAllLowStock(!showAllLowStock)}
-              style={{
-                marginTop: '12px',
-                padding: '6px 12px',
-                background: '#f59e0b',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '11px',
-                cursor: 'pointer'
-              }}
-            >
-              {showAllLowStock ? 'Show Less' : `Show ${lowStockProducts.length - 6} More`}
-            </button>
-          )}
         </div>
       )}
     </div>
