@@ -2,6 +2,15 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { Product, CartItem } from '../types'
 import { toast, Toaster } from 'react-hot-toast'
+import { 
+  getLoyaltySummary, 
+  validatePointsRedemption, 
+  processLoyaltyAfterSale,
+  estimatePointsEarned,
+  formatCurrency,
+  formatPoints,
+  getTierName
+} from '../services/loyaltyService'
 
 interface POSProps {
   isAdmin?: boolean
@@ -38,6 +47,13 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
   const [showProducts, setShowProducts] = useState(true)
   const [currentTime, setCurrentTime] = useState<string>('')
   const [currentDate, setCurrentDate] = useState<string>('')
+  
+  // Loyalty states
+  const [customerLoyalty, setCustomerLoyalty] = useState<any>(null)
+  const [useLoyaltyPoints, setUseLoyaltyPoints] = useState(false)
+  const [loyaltyDiscount, setLoyaltyDiscount] = useState(0)
+  const [loyaltyPointsToUse, setLoyaltyPointsToUse] = useState(0)
+  const [showLoyaltyPanel, setShowLoyaltyPanel] = useState(false)
 
   useEffect(() => {
     fetchProducts()
@@ -54,6 +70,13 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
 
     return () => { stockChannel.unsubscribe() }
   }, [])
+
+  // Fetch loyalty when customer changes
+  useEffect(() => {
+    if (activeTab) {
+      fetchLoyaltySummary(activeTab.customerId)
+    }
+  }, [activeTab?.customerId])
 
   useEffect(() => {
     const updateDateTime = () => {
@@ -84,6 +107,51 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
   async function fetchCustomers() {
     const { data } = await supabase.from('customers').select('*').order('name')
     setCustomers(data || [])
+  }
+
+  async function fetchLoyaltySummary(customerId: string) {
+    if (!customerId || customerId === 'walk-in') {
+      setCustomerLoyalty(null)
+      setUseLoyaltyPoints(false)
+      setLoyaltyDiscount(0)
+      return
+    }
+    
+    const summary = await getLoyaltySummary(customerId, '')
+    setCustomerLoyalty(summary)
+  }
+
+  async function handleLoyaltyToggle() {
+    const activeTab = getActiveTab()
+    if (!activeTab || activeTab.customerId === 'walk-in') {
+      toast.error('Loyalty points only available for registered customers')
+      return
+    }
+    
+    if (!useLoyaltyPoints) {
+      // Trying to enable loyalty
+      const validation = await validatePointsRedemption(
+        activeTab.customerId,
+        activeTab.total
+      )
+      
+      if (validation.valid) {
+        setUseLoyaltyPoints(true)
+        setLoyaltyDiscount(validation.discountAmount)
+        setLoyaltyPointsToUse(validation.pointsToUse)
+        toast.success(validation.message)
+      } else {
+        toast.error(validation.message)
+        setUseLoyaltyPoints(false)
+        setLoyaltyDiscount(0)
+      }
+    } else {
+      // Disabling loyalty
+      setUseLoyaltyPoints(false)
+      setLoyaltyDiscount(0)
+      setLoyaltyPointsToUse(0)
+      toast.success('Loyalty discount removed')
+    }
   }
 
   async function addNewCustomer() {
@@ -136,6 +204,8 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
     }
     setTabs(prev => [...prev, newTab])
     setActiveTabId(newTab.id)
+    setUseLoyaltyPoints(false)
+    setLoyaltyDiscount(0)
   }
 
   const closeTab = (tabId: string) => {
@@ -176,6 +246,13 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
     }
     updateTabCart(activeTab.id, newCart)
     
+    // Turn off loyalty when cart changes
+    if (useLoyaltyPoints) {
+      setUseLoyaltyPoints(false)
+      setLoyaltyDiscount(0)
+      setLoyaltyPointsToUse(0)
+    }
+    
     // On mobile, auto-hide products after adding to cart
     if (window.innerWidth <= 768) {
       setShowProducts(false)
@@ -203,6 +280,13 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
       return item
     }).filter(item => item.quantity > 0)
     updateTabCart(activeTab.id, newCart)
+    
+    // Turn off loyalty when cart changes
+    if (useLoyaltyPoints) {
+      setUseLoyaltyPoints(false)
+      setLoyaltyDiscount(0)
+      setLoyaltyPointsToUse(0)
+    }
   }
 
   const updateTabCart = (tabId: string, newCart: CartItem[]) => {
@@ -223,6 +307,18 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
     }
 
     const customer = customers.find(c => c.name === activeTab.customerName) || { id: null, outstanding_balance: 0 }
+    
+    // Calculate final total after loyalty discount
+    let finalTotal = activeTab.total
+    let loyaltyDiscountApplied = 0
+    let loyaltyPointsUsed = 0
+    
+    if (useLoyaltyPoints && loyaltyDiscount > 0 && activeTab.customerId !== 'walk-in') {
+      finalTotal = Math.max(0, activeTab.total - loyaltyDiscount)
+      loyaltyDiscountApplied = loyaltyDiscount
+      loyaltyPointsUsed = loyaltyPointsToUse
+    }
+    
     const invoiceNumber = `INV-${Date.now()}`
     
     const { error: invoiceError } = await supabase.from('invoices').insert([{
@@ -232,9 +328,12 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
       items: activeTab.cart,
       subtotal: activeTab.subtotal,
       tax: activeTab.tax,
-      total: activeTab.total,
+      total: finalTotal,
       payment_method: paymentMethod,
-      tab_status: paymentMethod === 'outstanding' ? 'outstanding' : 'paid'
+      tab_status: paymentMethod === 'outstanding' ? 'outstanding' : 'paid',
+      loyalty_discount: loyaltyDiscountApplied,
+      loyalty_points_earned: 0,
+      loyalty_points_used: loyaltyPointsUsed
     }])
 
     if (invoiceError) {
@@ -242,6 +341,7 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
       return
     }
 
+    // Update stock
     for (const item of activeTab.cart) {
       const product = products.find(p => p.name === item.name)
       if (product) {
@@ -251,14 +351,40 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
       }
     }
 
+    // Update customer outstanding balance if payment is outstanding
     if (paymentMethod === 'outstanding' && customer.id) {
-      const newBalance = (customer.outstanding_balance || 0) + activeTab.total
+      const newBalance = (customer.outstanding_balance || 0) + finalTotal
       await supabase.from('customers').update({ outstanding_balance: newBalance }).eq('id', customer.id)
     }
 
+    // Process loyalty points after sale
+    if (customer.id && customer.id !== 'walk-in') {
+      const loyaltyResult = await processLoyaltyAfterSale(
+        customer.id,
+        activeTab.customerName,
+        finalTotal,
+        loyaltyDiscountApplied,
+        loyaltyPointsUsed
+      )
+      
+      if (loyaltyResult.success && loyaltyResult.pointsEarned > 0) {
+        toast.success(`🎉 You earned ${loyaltyResult.pointsEarned} loyalty points!`)
+      }
+      
+      // Refresh loyalty summary
+      await fetchLoyaltySummary(customer.id)
+    }
+
     toast.success(`Sale complete! Invoice: ${invoiceNumber}`)
+    if (loyaltyDiscountApplied > 0) {
+      toast.info(`Loyalty discount applied: ₦${loyaltyDiscountApplied.toLocaleString()}`)
+    }
+    
     updateTabCart(activeTab.id, [])
     setPaymentMethod('cash')
+    setUseLoyaltyPoints(false)
+    setLoyaltyDiscount(0)
+    setLoyaltyPointsToUse(0)
   }
 
   const activeTab = getActiveTab()
@@ -273,6 +399,11 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
     c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
     (c.phone && c.phone.includes(customerSearch))
   )
+
+  // Calculate effective total with loyalty discount
+  const effectiveTotal = useLoyaltyPoints && loyaltyDiscount > 0 
+    ? Math.max(0, (activeTab?.total || 0) - loyaltyDiscount)
+    : (activeTab?.total || 0)
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -342,6 +473,11 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
                       ? { ...tab, tax: newTax, total: newTotal }
                       : tab
                   ))
+                  // Reset loyalty when VAT changes
+                  if (useLoyaltyPoints) {
+                    setUseLoyaltyPoints(false)
+                    setLoyaltyDiscount(0)
+                  }
                 }
               }}
             />
@@ -415,8 +551,7 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
           <button
             onClick={() => setShowProducts(!showProducts)}
             style={{
-              display: 'none',
-              '@media (max-width: 768px)': { display: 'flex' },
+              display: window.innerWidth <= 768 ? 'flex' : 'none',
               background: '#22c55e',
               color: 'white',
               padding: '8px',
@@ -427,13 +562,12 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
               fontWeight: 'bold',
               justifyContent: 'center'
             }}
-            className="mobile-toggle-btn"
           >
             {showProducts ? '📦 Hide Products' : '📦 Show Products'}
           </button>
           
           <div style={{ display: 'flex', flex: 1, overflow: 'hidden', flexDirection: window.innerWidth <= 768 ? 'column' : 'row' }}>
-            {/* Products Section - Collapsible on mobile */}
+            {/* Products Section */}
             <div style={{ 
               flex: window.innerWidth <= 768 ? 'auto' : 1, 
               display: window.innerWidth <= 768 ? (showProducts ? 'block' : 'none') : 'block',
@@ -484,14 +618,11 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
                   </button>
                 ))}
               </div>
-              {filteredProducts.length === 0 && (
-                <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>No products found</div>
-              )}
             </div>
 
-            {/* Cart Section - Always visible on mobile */}
+            {/* Cart Section */}
             <div style={{ 
-              width: window.innerWidth <= 768 ? '100%' : '340px', 
+              width: window.innerWidth <= 768 ? '100%' : '380px', 
               background: 'white', 
               display: 'flex', 
               flexDirection: 'column',
@@ -518,6 +649,65 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
                   style={{ width: '100%', padding: '6px 8px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '13px' }}
                 />
               </div>
+
+              {/* Loyalty Panel - Only show for registered customers */}
+              {activeTab.customerId !== 'walk-in' && customerLoyalty && (
+                <div style={{ 
+                  padding: '12px', 
+                  borderBottom: '1px solid #e5e7eb', 
+                  background: '#fef3c7',
+                  cursor: 'pointer'
+                }}>
+                  <div 
+                    onClick={() => setShowLoyaltyPanel(!showLoyaltyPanel)}
+                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                  >
+                    <div>
+                      <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#92400e' }}>
+                        ⭐ Loyalty: {getTierName(customerLoyalty.totalSpent, [])} ({customerLoyalty.points} points)
+                      </div>
+                      {customerLoyalty.nextReward && (
+                        <div style={{ fontSize: '10px', color: '#b45309' }}>
+                          Spend ₦{customerLoyalty.nextReward.amountNeeded.toLocaleString()} more for ₦{customerLoyalty.nextReward.reward} off
+                        </div>
+                      )}
+                    </div>
+                    <span style={{ fontSize: '14px', color: '#92400e' }}>{showLoyaltyPanel ? '▲' : '▼'}</span>
+                  </div>
+                  
+                  {showLoyaltyPanel && (
+                    <div style={{ marginTop: '12px', paddingTop: '8px', borderTop: '1px solid #fde68a' }}>
+                      <div style={{ fontSize: '11px', color: '#92400e', marginBottom: '8px' }}>
+                        Total Spent: ₦{customerLoyalty.totalSpent.toLocaleString()}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#92400e', marginBottom: '8px' }}>
+                        Available Points: {customerLoyalty.points}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#92400e', marginBottom: '12px' }}>
+                        Eligible Discount: ₦{customerLoyalty.eligibleDiscount.toLocaleString()}
+                      </div>
+                      <button
+                        onClick={handleLoyaltyToggle}
+                        disabled={customerLoyalty.points === 0 || activeTab.cart.length === 0}
+                        style={{
+                          width: '100%',
+                          padding: '8px',
+                          background: useLoyaltyPoints ? '#ef4444' : '#22c55e',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          fontSize: '12px',
+                          fontWeight: 'bold',
+                          cursor: (customerLoyalty.points === 0 || activeTab.cart.length === 0) ? 'not-allowed' : 'pointer',
+                          opacity: (customerLoyalty.points === 0 || activeTab.cart.length === 0) ? 0.5 : 1
+                        }}
+                      >
+                        {useLoyaltyPoints ? 'Remove Loyalty Discount' : 'Apply Loyalty Discount'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
                 {activeTab.cart.map(item => (
@@ -554,9 +744,17 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
                       <span>₦{activeTab.tax.toLocaleString()}</span>
                     </div>
                   )}
+                  {useLoyaltyPoints && loyaltyDiscount > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '12px', color: '#f59e0b' }}>
+                      <span>⭐ Loyalty Discount</span>
+                      <span>-₦{loyaltyDiscount.toLocaleString()}</span>
+                    </div>
+                  )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '16px', paddingTop: '6px', borderTop: '1px solid #e5e7eb' }}>
                     <span>Total</span>
-                    <span style={{ color: '#22c55e' }}>₦{activeTab.total.toLocaleString()}</span>
+                    <span style={{ color: effectiveTotal !== activeTab.total ? '#f59e0b' : '#22c55e' }}>
+                      ₦{effectiveTotal.toLocaleString()}
+                    </span>
                   </div>
                 </div>
 
@@ -580,13 +778,12 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
         </div>
       )}
 
-      {/* Customer Modal - Searchable with Add Customer */}
+      {/* Customer Modal */}
       {showCustomerModal && (
         <div className="modal-overlay">
           <div className="modal" style={{ width: window.innerWidth <= 480 ? '95%' : '400px', maxHeight: '80vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <h2 className="modal-title" style={{ marginBottom: '16px', fontSize: '18px' }}>Select Customer</h2>
             
-            {/* Search Input */}
             <input
               type="text"
               placeholder="🔍 Search customer by name or phone..."
@@ -606,7 +803,6 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
             {!showAddCustomerForm ? (
               <>
                 <div style={{ flex: 1, overflowY: 'auto', maxHeight: '300px' }}>
-                  {/* Walk-in Customer Option */}
                   <button
                     onClick={() => { 
                       createNewTab(); 
@@ -657,6 +853,11 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
                         <div style={{ fontSize: '10px', color: '#ef4444', marginTop: '4px' }}>
                           Outstanding: ₦{(c.outstanding_balance || 0).toLocaleString()}
                         </div>
+                        {c.loyalty_points > 0 && (
+                          <div style={{ fontSize: '10px', color: '#8b5cf6', marginTop: '2px' }}>
+                            ⭐ {c.loyalty_points} points
+                          </div>
+                        )}
                       </button>
                     ))
                   )}
@@ -780,15 +981,6 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
           </div>
         </div>
       )}
-      
-      {/* Add styles for mobile toggle */}
-      <style>{`
-        @media (max-width: 768px) {
-          .mobile-toggle-btn {
-            display: flex !important;
-          }
-        }
-      `}</style>
     </div>
   )
 }
