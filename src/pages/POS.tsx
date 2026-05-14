@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { Product, CartItem } from '../types'
 import { toast, Toaster } from 'react-hot-toast'
@@ -38,6 +38,10 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
   const [showProducts, setShowProducts] = useState(true)
   const [currentTime, setCurrentTime] = useState<string>('')
   const [currentDate, setCurrentDate] = useState<string>('')
+  const [isProcessing, setIsProcessing] = useState(false)
+
+  // Refs for debouncing
+  const processTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     fetchProducts()
@@ -52,7 +56,12 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
 
     createNewTab()
 
-    return () => { stockChannel.unsubscribe() }
+    return () => { 
+      stockChannel.unsubscribe()
+      if (processTimeoutRef.current) {
+        clearTimeout(processTimeoutRef.current)
+      }
+    }
   }, [])
 
   useEffect(() => {
@@ -215,49 +224,65 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
   }
 
   const processSale = async () => {
+    // Prevent duplicate submissions
+    if (isProcessing) {
+      toast.error('Please wait, sale is already processing')
+      return
+    }
+
     const activeTab = getActiveTab()
     if (!activeTab || activeTab.cart.length === 0) {
       toast.error('Cart is empty')
       return
     }
 
-    const customer = customers.find(c => c.name === activeTab.customerName) || { id: null, outstanding_balance: 0 }
-    const invoiceNumber = `INV-${Date.now()}`
-    
-    const { error: invoiceError } = await supabase.from('invoices').insert([{
-      invoice_number: invoiceNumber,
-      customer_name: activeTab.customerName,
-      customer_id: customer.id !== 'walk-in' ? customer.id : null,
-      items: activeTab.cart,
-      subtotal: activeTab.subtotal,
-      tax: activeTab.tax,
-      total: activeTab.total,
-      payment_method: paymentMethod,
-      tab_status: paymentMethod === 'outstanding' ? 'outstanding' : 'paid'
-    }])
+    setIsProcessing(true)
 
-    if (invoiceError) {
-      toast.error(invoiceError.message)
-      return
-    }
+    try {
+      const customer = customers.find(c => c.name === activeTab.customerName) || { id: null, outstanding_balance: 0 }
+      const invoiceNumber = `INV-${Date.now()}`
+      
+      const { error: invoiceError } = await supabase.from('invoices').insert([{
+        invoice_number: invoiceNumber,
+        customer_name: activeTab.customerName,
+        customer_id: customer.id !== 'walk-in' ? customer.id : null,
+        items: activeTab.cart,
+        subtotal: activeTab.subtotal,
+        tax: activeTab.tax,
+        total: activeTab.total,
+        payment_method: paymentMethod,
+        tab_status: paymentMethod === 'outstanding' ? 'outstanding' : 'paid'
+      }])
 
-    for (const item of activeTab.cart) {
-      const product = products.find(p => p.name === item.name)
-      if (product) {
-        const newStock = product.stock - item.quantity
-        await supabase.from('products').update({ stock: newStock }).eq('id', product.id)
-        setProducts(current => current.map(p => p.id === product.id ? { ...p, stock: newStock } : p))
+      if (invoiceError) {
+        toast.error(invoiceError.message)
+        setIsProcessing(false)
+        return
       }
-    }
 
-    if (paymentMethod === 'outstanding' && customer.id) {
-      const newBalance = (customer.outstanding_balance || 0) + activeTab.total
-      await supabase.from('customers').update({ outstanding_balance: newBalance }).eq('id', customer.id)
-    }
+      for (const item of activeTab.cart) {
+        const product = products.find(p => p.name === item.name)
+        if (product) {
+          const newStock = product.stock - item.quantity
+          await supabase.from('products').update({ stock: newStock }).eq('id', product.id)
+          setProducts(current => current.map(p => p.id === product.id ? { ...p, stock: newStock } : p))
+        }
+      }
 
-    toast.success(`Sale complete! Invoice: ${invoiceNumber}`)
-    updateTabCart(activeTab.id, [])
-    setPaymentMethod('cash')
+      if (paymentMethod === 'outstanding' && customer.id) {
+        const newBalance = (customer.outstanding_balance || 0) + activeTab.total
+        await supabase.from('customers').update({ outstanding_balance: newBalance }).eq('id', customer.id)
+      }
+
+      toast.success(`Sale complete! Invoice: ${invoiceNumber}`)
+      updateTabCart(activeTab.id, [])
+      setPaymentMethod('cash')
+    } catch (err) {
+      console.error('Sale error:', err)
+      toast.error('Error processing sale')
+    } finally {
+      setIsProcessing(false)
+    }
   }
 
   const activeTab = getActiveTab()
@@ -497,11 +522,27 @@ function POS({ isAdmin = false, userName = '' }: POSProps) {
                   <option value="cash">Cash</option>
                   <option value="card">Card</option>
                   <option value="transfer">Transfer</option>
+                  <option value="cash_transfer">Cash + Transfer</option>
                   <option value="outstanding">Outstanding (Credit)</option>
                 </select>
 
-                <button onClick={processSale} disabled={activeTab.cart.length === 0} style={{ width: '100%', background: '#22c55e', color: 'white', padding: '10px', borderRadius: '8px', fontWeight: 'bold', border: 'none', cursor: 'pointer', fontSize: '14px', opacity: activeTab.cart.length === 0 ? 0.5 : 1 }}>
-                  Complete Sale
+                <button 
+                  onClick={processSale} 
+                  disabled={activeTab.cart.length === 0 || isProcessing} 
+                  style={{ 
+                    width: '100%', 
+                    background: '#22c55e', 
+                    color: 'white', 
+                    padding: '10px', 
+                    borderRadius: '8px', 
+                    fontWeight: 'bold', 
+                    border: 'none', 
+                    cursor: (activeTab.cart.length === 0 || isProcessing) ? 'not-allowed' : 'pointer', 
+                    fontSize: '14px', 
+                    opacity: (activeTab.cart.length === 0 || isProcessing) ? 0.5 : 1 
+                  }}
+                >
+                  {isProcessing ? 'Processing...' : 'Complete Sale'}
                 </button>
               </div>
             </div>
