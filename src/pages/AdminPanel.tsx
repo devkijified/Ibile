@@ -3,6 +3,7 @@ import AdminDashboard from './AdminDashboard'
 import ProductManagement from './ProductManagement'
 import AddStock from './AddStock'
 import StaffManagement from './StaffManagement'
+import FraudDetection from './FraudDetection'
 
 interface AdminPanelProps {
   onViewCustomer?: (customerId: string) => void
@@ -26,6 +27,7 @@ function AdminPanel({ onViewCustomer }: AdminPanelProps) {
         <button onClick={() => setActiveTab('products')} style={{ padding: '12px 20px', background: 'none', border: 'none', cursor: 'pointer', borderBottom: activeTab === 'products' ? '2px solid #22c55e' : 'none', color: activeTab === 'products' ? '#22c55e' : '#4b5563', fontWeight: activeTab === 'products' ? 'bold' : 'normal' }}>📦 Products</button>
         <button onClick={() => setActiveTab('addstock')} style={{ padding: '12px 20px', background: 'none', border: 'none', cursor: 'pointer', borderBottom: activeTab === 'addstock' ? '2px solid #22c55e' : 'none', color: activeTab === 'addstock' ? '#22c55e' : '#4b5563', fontWeight: activeTab === 'addstock' ? 'bold' : 'normal' }}>📦 Add Stock</button>
         <button onClick={() => setActiveTab('staff')} style={{ padding: '12px 20px', background: 'none', border: 'none', cursor: 'pointer', borderBottom: activeTab === 'staff' ? '2px solid #22c55e' : 'none', color: activeTab === 'staff' ? '#22c55e' : '#4b5563', fontWeight: activeTab === 'staff' ? 'bold' : 'normal' }}>👥 Staff</button>
+        <button onClick={() => setActiveTab('fraud')} style={{ padding: '12px 20px', background: 'none', border: 'none', cursor: 'pointer', borderBottom: activeTab === 'fraud' ? '2px solid #dc2626' : 'none', color: activeTab === 'fraud' ? '#dc2626' : '#4b5563', fontWeight: activeTab === 'fraud' ? 'bold' : 'normal' }}>🛡️ Fraud Detection</button>
       </div>
 
       <div style={{ padding: '20px' }}>
@@ -33,6 +35,7 @@ function AdminPanel({ onViewCustomer }: AdminPanelProps) {
         {activeTab === 'products' && <ProductManagement />}
         {activeTab === 'addstock' && <AddStock />}
         {activeTab === 'staff' && <StaffManagement />}
+        {activeTab === 'fraud' && <FraudDetection />}
       </div>
     </div>
   )
