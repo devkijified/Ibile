@@ -283,7 +283,7 @@ function ProductManagement() {
         </div>
       )}
 
-      {/* Add/Edit Product Modal */}
+      {/* Add/Edit Product Modal with Stock Field */}
       {showModal && (
         <div className="modal-overlay">
           <div className="modal" style={{ width: '500px', maxHeight: '90vh', overflowY: 'auto' }}>
@@ -362,14 +362,45 @@ function ProductManagement() {
               />
             </div>
             
+            {/* Stock Field - Prominently displayed for easy editing */}
             <div style={{ marginBottom: '16px' }}>
+              <label style={{ fontSize: '13px', fontWeight: 'bold', display: 'block', marginBottom: '4px', color: '#1f2937' }}>
+                📦 Current Stock Quantity
+                {editingProduct && (
+                  <span style={{ fontSize: '11px', color: '#6b7280', fontWeight: 'normal', marginLeft: '8px' }}>
+                    (Current: {editingProduct.stock})
+                  </span>
+                )}
+              </label>
               <input
                 type="number"
-                placeholder="Initial Stock"
+                placeholder="Enter stock quantity"
                 value={formData.stock}
                 onChange={(e) => setFormData({...formData, stock: e.target.value})}
-                style={{ width: '100%', padding: '10px', border: '1px solid #ccc', borderRadius: '6px' }}
+                style={{ 
+                  width: '100%', 
+                  padding: '12px', 
+                  border: '2px solid #22c55e', 
+                  borderRadius: '8px', 
+                  fontSize: '16px',
+                  fontWeight: 'bold',
+                  background: '#f0fdf4'
+                }}
               />
+              {editingProduct && formData.stock && (
+                <div style={{ 
+                  fontSize: '12px', 
+                  marginTop: '6px',
+                  color: parseInt(formData.stock) > editingProduct.stock ? '#22c55e' : 
+                         parseInt(formData.stock) < editingProduct.stock ? '#ef4444' : '#6b7280'
+                }}>
+                  {parseInt(formData.stock) > editingProduct.stock ? 
+                    `📈 Adding ${parseInt(formData.stock) - editingProduct.stock} units` : 
+                    parseInt(formData.stock) < editingProduct.stock ? 
+                    `📉 Removing ${editingProduct.stock - parseInt(formData.stock)} units` : 
+                    '✅ Stock unchanged'}
+                </div>
+              )}
             </div>
             
             {formData.price && formData.cost_price && (
@@ -383,12 +414,26 @@ function ProductManagement() {
                   <strong style={{ color: '#22c55e' }}>{profitMargin(parseFloat(formData.price), parseFloat(formData.cost_price)).toFixed(1)}%</strong>
                 </div>
                 {formData.stock && parseInt(formData.stock) > 0 && (
-                  <div style={{ fontSize: '12px', display: 'flex', justifyContent: 'space-between', paddingTop: '8px', borderTop: '1px solid #dcfce7', marginTop: '4px' }}>
-                    <span>Total Stock Profit:</span>
-                    <strong style={{ color: '#22c55e' }}>
-                      ₦{(expectedProfit(parseFloat(formData.price), parseFloat(formData.cost_price)) * parseInt(formData.stock)).toLocaleString()}
-                    </strong>
-                  </div>
+                  <>
+                    <div style={{ fontSize: '12px', display: 'flex', justifyContent: 'space-between', paddingTop: '8px', borderTop: '1px solid #dcfce7', marginTop: '4px' }}>
+                      <span>Total Cost Price:</span>
+                      <strong style={{ color: '#ef4444' }}>
+                        ₦{(parseFloat(formData.cost_price) * parseInt(formData.stock)).toLocaleString()}
+                      </strong>
+                    </div>
+                    <div style={{ fontSize: '12px', display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Total Selling Value:</span>
+                      <strong style={{ color: '#3b82f6' }}>
+                        ₦{(parseFloat(formData.price) * parseInt(formData.stock)).toLocaleString()}
+                      </strong>
+                    </div>
+                    <div style={{ fontSize: '12px', display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Total Stock Profit:</span>
+                      <strong style={{ color: '#22c55e' }}>
+                        ₦{(expectedProfit(parseFloat(formData.price), parseFloat(formData.cost_price)) * parseInt(formData.stock)).toLocaleString()}
+                      </strong>
+                    </div>
+                  </>
                 )}
               </div>
             )}
