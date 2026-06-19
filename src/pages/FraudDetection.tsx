@@ -30,7 +30,6 @@ function FraudDetection() {
     const detectedAlerts: FraudAlert[] = []
 
     try {
-      // Determine date range
       const now = new Date()
       let startDate = new Date()
       if (timeRange === '1d') startDate.setDate(now.getDate() - 1)
@@ -38,14 +37,12 @@ function FraudDetection() {
       else if (timeRange === '7d') startDate.setDate(now.getDate() - 7)
       else if (timeRange === '30d') startDate.setDate(now.getDate() - 30)
       
-      // Fetch invoices
       const { data: invoices } = await supabase
         .from('invoices')
         .select('*')
         .gte('created_at', startDate.toISOString())
         .order('created_at', { ascending: true })
 
-      // Fetch cashiers (staff) - get user emails from auth
       const { data: users } = await supabase.auth.admin.listUsers()
       const cashiers = users?.users || []
 
@@ -62,7 +59,7 @@ function FraudDetection() {
             id: `discount-${inv.id}`,
             type: 'high_discount',
             severity: inv.discount / inv.subtotal > 0.7 ? 'critical' : 'high',
-            message: `💰 Excessive discount: ${discountRate}% on ${inv.invoice_number}`,
+            message: `Excessive discount: ${discountRate}% on ${inv.invoice_number}`,
             details: {
               invoice: inv.invoice_number,
               discount: inv.discount,
@@ -76,8 +73,7 @@ function FraudDetection() {
           })
         })
 
-        // ====== ALERT 2: Suspicious Timing (Sales outside normal hours) ======
-        // Normal hours: 8 AM - 11 PM
+        // ====== ALERT 2: Suspicious Timing ======
         const suspiciousTimeInvoices = invoices.filter(inv => {
           const hour = new Date(inv.created_at).getHours()
           return hour < 7 || hour > 23
@@ -89,7 +85,7 @@ function FraudDetection() {
             id: `time-${inv.id}`,
             type: 'time_anomaly',
             severity: 'medium',
-            message: `🕐 Sale at unusual hour: ${hour}:00 on ${inv.invoice_number}`,
+            message: `Sale at unusual hour: ${hour}:00 on ${inv.invoice_number}`,
             details: {
               invoice: inv.invoice_number,
               hour: hour,
@@ -102,7 +98,7 @@ function FraudDetection() {
           })
         })
 
-        // ====== ALERT 3: Customer Pattern - Same customer multiple times in short period ======
+        // ====== ALERT 3: Customer Pattern ======
         const customerFrequency: any = {}
         invoices.forEach(inv => {
           if (inv.customer_name && inv.customer_name !== 'Walk-in Customer') {
@@ -120,7 +116,7 @@ function FraudDetection() {
               id: `customer-${Date.now()}-${customerName}`,
               type: 'customer_pattern',
               severity: invs.length >= 10 ? 'high' : 'medium',
-              message: `👤 Customer "${customerName}" made ${invs.length} purchases today (₦${total.toLocaleString()})`,
+              message: `Customer "${customerName}" made ${invs.length} purchases today (${total.toLocaleString()})`,
               details: {
                 customer: customerName,
                 count: invs.length,
@@ -133,7 +129,7 @@ function FraudDetection() {
           }
         })
 
-        // ====== ALERT 4: Cashier Pattern - Unusually high sales per hour ======
+        // ====== ALERT 4: Cashier Pattern ======
         const cashierSales: any = {}
         invoices.forEach(inv => {
           const hour = new Date(inv.created_at).getHours()
@@ -145,7 +141,6 @@ function FraudDetection() {
           cashierSales[key].invoices.push(inv)
         })
         
-        // Get average sales per hour across all cashiers
         let totalSalesPerHour: any = {}
         invoices.forEach(inv => {
           const hour = new Date(inv.created_at).getHours()
@@ -165,7 +160,7 @@ function FraudDetection() {
               id: `cashier-${Date.now()}-${cashier}`,
               type: 'cash_shortage',
               severity: 'high',
-              message: `⚡ Cashier "${cashier}" had ${data.count} sales in hour ${hour} (avg: ${Math.round(avgSales)})`,
+              message: `Cashier "${cashier}" had ${data.count} sales in hour ${hour} (avg: ${Math.round(avgSales)})`,
               details: {
                 cashier: cashier,
                 hour: hour,
@@ -191,7 +186,7 @@ function FraudDetection() {
             id: `bulk-${inv.id}`,
             type: 'bulk_discount',
             severity: inv.discount > 5000 ? 'high' : 'medium',
-            message: `📦 Bulk order (${itemCount} items) with ₦${inv.discount.toLocaleString()} discount on ${inv.invoice_number}`,
+            message: `Bulk order (${itemCount} items) with ${inv.discount.toLocaleString()} discount on ${inv.invoice_number}`,
             details: {
               invoice: inv.invoice_number,
               items: itemCount,
@@ -213,7 +208,7 @@ function FraudDetection() {
             id: `walkin-${Date.now()}`,
             type: 'customer_pattern',
             severity: walkInPercentage > 85 ? 'critical' : 'high',
-            message: `👥 ${walkInPercentage.toFixed(0)}% of sales are "Walk-in Customer" (${walkInSales.length} of ${invoices.length})`,
+            message: `${walkInPercentage.toFixed(0)}% of sales are "Walk-in Customer" (${walkInSales.length} of ${invoices.length})`,
             details: {
               walk_in_count: walkInSales.length,
               total_count: invoices.length,
@@ -229,7 +224,6 @@ function FraudDetection() {
       console.error('Error scanning for anomalies:', err)
     }
 
-    // Remove duplicates based on message
     const uniqueAlerts = detectedAlerts.filter((alert, index, self) => 
       index === self.findIndex(a => a.message === alert.message)
     )
@@ -262,11 +256,11 @@ function FraudDetection() {
 
   const getSeverityLabel = (severity: string) => {
     switch(severity) {
-      case 'critical': return '🔥 Critical'
-      case 'high': return '🔴 High'
-      case 'medium': return '🟡 Medium'
-      case 'low': return '🟢 Low'
-      default: return '⚪ Unknown'
+      case 'critical': return 'Critical'
+      case 'high': return 'High'
+      case 'medium': return 'Medium'
+      case 'low': return 'Low'
+      default: return 'Unknown'
     }
   }
 
@@ -302,16 +296,15 @@ function FraudDetection() {
       <Toaster position="top-right" />
       
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: 'bold' }}>🛡️ Fraud Detection & Alerts</h1>
+        <h1 style={{ fontSize: '24px', fontWeight: 'bold' }}>Fraud Detection & Alerts</h1>
         <button
           onClick={() => scanForAnomalies()}
           style={{ background: '#3b82f6', color: 'white', padding: '8px 20px', borderRadius: '6px', border: 'none', cursor: 'pointer' }}
         >
-          🔄 Scan Now
+          Scan Now
         </button>
       </div>
 
-      {/* Stats Cards */}
       <div style={{ 
         display: 'grid', 
         gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', 
@@ -324,23 +317,22 @@ function FraudDetection() {
         </div>
         <div style={{ background: '#fef2f2', padding: '12px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', textAlign: 'center' }}>
           <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#dc2626' }}>{stats.critical}</div>
-          <div style={{ fontSize: '11px', color: '#6b7280' }}>🔥 Critical</div>
+          <div style={{ fontSize: '11px', color: '#6b7280' }}>Critical</div>
         </div>
         <div style={{ background: '#fef3c7', padding: '12px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', textAlign: 'center' }}>
           <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#f59e0b' }}>{stats.high}</div>
-          <div style={{ fontSize: '11px', color: '#6b7280' }}>🔴 High</div>
+          <div style={{ fontSize: '11px', color: '#6b7280' }}>High</div>
         </div>
         <div style={{ background: '#f3e8ff', padding: '12px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', textAlign: 'center' }}>
           <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#8b5cf6' }}>{stats.medium}</div>
-          <div style={{ fontSize: '11px', color: '#6b7280' }}>🟡 Medium</div>
+          <div style={{ fontSize: '11px', color: '#6b7280' }}>Medium</div>
         </div>
         <div style={{ background: '#d1fae5', padding: '12px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', textAlign: 'center' }}>
           <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#22c55e' }}>{stats.resolved}</div>
-          <div style={{ fontSize: '11px', color: '#6b7280' }}>✅ Resolved</div>
+          <div style={{ fontSize: '11px', color: '#6b7280' }}>Resolved</div>
         </div>
       </div>
 
-      {/* Filters */}
       <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
         <select
           value={timeRange}
@@ -375,12 +367,11 @@ function FraudDetection() {
         </label>
       </div>
 
-      {/* Alerts List */}
       {loading ? (
         <div style={{ textAlign: 'center', padding: '40px' }}>Scanning for anomalies...</div>
       ) : filteredAlerts.length === 0 ? (
         <div style={{ background: 'white', borderRadius: '12px', padding: '40px', textAlign: 'center', color: '#6b7280' }}>
-          {alerts.length === 0 ? '✅ No suspicious patterns detected. All clear!' : 'No alerts match your filters.'}
+          {alerts.length === 0 ? 'No suspicious patterns detected. All clear!' : 'No alerts match your filters.'}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -412,7 +403,7 @@ function FraudDetection() {
                     </span>
                     {alert.resolved && (
                       <span style={{ fontSize: '10px', background: '#22c55e', color: 'white', padding: '2px 8px', borderRadius: '12px' }}>
-                        ✅ Resolved
+                        Resolved
                       </span>
                     )}
                   </div>
@@ -422,11 +413,11 @@ function FraudDetection() {
                     {alert.details.cashier && <span> • Cashier: {alert.details.cashier}</span>}
                   </div>
                   <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>
-                    {alert.type === 'high_discount' && `Discount: ${alert.details.discount_rate}% on ₦${alert.details.subtotal?.toLocaleString()}`}
-                    {alert.type === 'time_anomaly' && `Sale at ${alert.details.hour}:00 - ₦${alert.details.total?.toLocaleString()}`}
-                    {alert.type === 'customer_pattern' && `${alert.details.count} purchases, ₦${alert.details.total_spent?.toLocaleString()} total`}
+                    {alert.type === 'high_discount' && `Discount: ${alert.details.discount_rate}% on ${alert.details.subtotal?.toLocaleString()}`}
+                    {alert.type === 'time_anomaly' && `Sale at ${alert.details.hour}:00 - ${alert.details.total?.toLocaleString()}`}
+                    {alert.type === 'customer_pattern' && `${alert.details.count} purchases, ${alert.details.total_spent?.toLocaleString()} total`}
                     {alert.type === 'cash_shortage' && `${alert.details.sales} sales in hour ${alert.details.hour} (avg: ${alert.details.average})`}
-                    {alert.type === 'bulk_discount' && `${alert.details.items} items, ₦${alert.details.discount?.toLocaleString()} discount`}
+                    {alert.type === 'bulk_discount' && `${alert.details.items} items, ${alert.details.discount?.toLocaleString()} discount`}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
@@ -451,10 +442,9 @@ function FraudDetection() {
         </div>
       )}
 
-      {/* Pattern Explanation */}
       {alerts.length > 0 && (
         <div style={{ background: '#f3f4f6', padding: '16px', borderRadius: '8px', marginTop: '20px' }}>
-          <h4 style={{ fontWeight: 'bold', marginBottom: '8px', fontSize: '13px }}>📊 Pattern Detection Rules</h4>
+          <h4 style={{ fontWeight: 'bold', marginBottom: '8px', fontSize: '13px' }}>Pattern Detection Rules</h4>
           <div style={{ fontSize: '12px', color: '#4b5563', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px' }}>
             <div>💰 <strong>Excessive Discounts:</strong> &gt;50% off</div>
             <div>🕐 <strong>Suspicious Timing:</strong> Before 7AM or after 11PM</div>
