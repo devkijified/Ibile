@@ -58,15 +58,33 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
               total_sales: 0, 
               count: 0, 
               outstanding: 0,
+              cash_total: 0,
+              card_total: 0,
+              transfer_total: 0,
+              cash_transfer_total: 0,
+              outstanding_total: 0,
               invoices: []
             }
           }
+          
+          // Add to total sales
           salesByDate[date].total_sales += inv.total
           salesByDate[date].count += 1
-          salesByDate[date].invoices.push(inv)
-          if (inv.payment_method === 'outstanding' || inv.tab_status === 'outstanding') {
+          
+          // Track by payment method
+          const method = inv.payment_method || 'cash'
+          if (method === 'cash') salesByDate[date].cash_total += inv.total
+          else if (method === 'card') salesByDate[date].card_total += inv.total
+          else if (method === 'transfer') salesByDate[date].transfer_total += inv.total
+          else if (method === 'cash_transfer') salesByDate[date].cash_transfer_total += inv.total
+          else if (method === 'outstanding') salesByDate[date].outstanding_total += inv.total
+          
+          // Track outstanding from tab_status as well
+          if (inv.tab_status === 'outstanding' || inv.payment_method === 'outstanding') {
             salesByDate[date].outstanding += inv.total
           }
+          
+          salesByDate[date].invoices.push(inv)
         })
         setDailySales(Object.values(salesByDate))
         
@@ -82,7 +100,7 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
               }
             }
             customerTotals[inv.customer_name].total += inv.total
-            if (inv.payment_method === 'outstanding') {
+            if (inv.payment_method === 'outstanding' || inv.tab_status === 'outstanding') {
               customerTotals[inv.customer_name].outstanding += inv.total
             }
           }
@@ -198,12 +216,8 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
     setShowInvoiceModal(true)
   }
 
-  const toggleDateExpand = (date: string, invoices: any[]) => {
-    if (expandedDate === date) {
-      setExpandedDate(null)
-    } else {
-      setExpandedDate(date)
-    }
+  const toggleDateExpand = (date: string) => {
+    setExpandedDate(expandedDate === date ? null : date)
   }
 
   if (loading) {
@@ -212,6 +226,11 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
 
   const totalSales = dailySales.reduce((sum, d) => sum + d.total_sales, 0)
   const totalOutstanding = dailySales.reduce((sum, d) => sum + (d.outstanding || 0), 0)
+  const totalCash = dailySales.reduce((sum, d) => sum + (d.cash_total || 0), 0)
+  const totalCard = dailySales.reduce((sum, d) => sum + (d.card_total || 0), 0)
+  const totalTransfer = dailySales.reduce((sum, d) => sum + (d.transfer_total || 0), 0)
+  const totalCashTransfer = dailySales.reduce((sum, d) => sum + (d.cash_transfer_total || 0), 0)
+  const totalOutstandingTotal = dailySales.reduce((sum, d) => sum + (d.outstanding_total || 0), 0)
 
   return (
     <div>
@@ -230,21 +249,37 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
       {/* Stats Cards */}
       <div style={{ 
         display: 'grid', 
-        gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', 
+        gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', 
         gap: '12px', 
         marginBottom: '20px' 
       }}>
         <div style={{ background: 'white', padding: '16px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-          <div style={{ fontSize: '12px', color: '#6b7280' }}>📊 Total Sales</div>
-          <div style={{ fontSize: '22px', fontWeight: 'bold', color: '#22c55e' }}>₦{totalSales.toLocaleString()}</div>
+          <div style={{ fontSize: '11px', color: '#6b7280' }}>Total Sales</div>
+          <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#22c55e' }}>₦{totalSales.toLocaleString()}</div>
         </div>
         <div style={{ background: 'white', padding: '16px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-          <div style={{ fontSize: '12px', color: '#6b7280' }}>💰 Outstanding</div>
-          <div style={{ fontSize: '22px', fontWeight: 'bold', color: '#ef4444' }}>₦{totalOutstanding.toLocaleString()}</div>
+          <div style={{ fontSize: '11px', color: '#6b7280' }}>Cash</div>
+          <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#16a34a' }}>₦{totalCash.toLocaleString()}</div>
         </div>
         <div style={{ background: 'white', padding: '16px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-          <div style={{ fontSize: '12px', color: '#6b7280' }}>⚠️ Low Stock</div>
-          <div style={{ fontSize: '22px', fontWeight: 'bold', color: '#f59e0b' }}>{lowStockProducts.length}</div>
+          <div style={{ fontSize: '11px', color: '#6b7280' }}>Card</div>
+          <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#3b82f6' }}>₦{totalCard.toLocaleString()}</div>
+        </div>
+        <div style={{ background: 'white', padding: '16px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+          <div style={{ fontSize: '11px', color: '#6b7280' }}>Transfer</div>
+          <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#8b5cf6' }}>₦{totalTransfer.toLocaleString()}</div>
+        </div>
+        <div style={{ background: 'white', padding: '16px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+          <div style={{ fontSize: '11px', color: '#6b7280' }}>Cash+Transfer</div>
+          <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#f59e0b' }}>₦{totalCashTransfer.toLocaleString()}</div>
+        </div>
+        <div style={{ background: 'white', padding: '16px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+          <div style={{ fontSize: '11px', color: '#6b7280' }}>Outstanding</div>
+          <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#ef4444' }}>₦{totalOutstandingTotal.toLocaleString()}</div>
+        </div>
+        <div style={{ background: 'white', padding: '16px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+          <div style={{ fontSize: '11px', color: '#6b7280' }}>⚠️ Low Stock</div>
+          <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#f59e0b' }}>{lowStockProducts.length}</div>
         </div>
       </div>
 
@@ -343,7 +378,7 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
                 border: '1px solid #e5e7eb'
               }}>
                 <button
-                  onClick={() => toggleDateExpand(day.date, day.invoices)}
+                  onClick={() => toggleDateExpand(day.date)}
                   style={{
                     width: '100%',
                     padding: '14px',
@@ -373,85 +408,125 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
                 
                 {expandedDate === day.date && day.invoices && (
                   <div style={{ padding: '12px', borderTop: '1px solid #e5e7eb', background: '#f9fafb' }}>
+                    {/* Payment Method Summary for this day */}
+                    <div style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', 
+                      gap: '8px', 
+                      marginBottom: '16px',
+                      background: '#f0fdf4',
+                      padding: '12px',
+                      borderRadius: '8px'
+                    }}>
+                      <div>
+                        <div style={{ fontSize: '10px', color: '#6b7280' }}>💵 Cash</div>
+                        <div style={{ fontWeight: 'bold', color: '#16a34a' }}>₦{(day.cash_total || 0).toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '10px', color: '#6b7280' }}>💳 Card</div>
+                        <div style={{ fontWeight: 'bold', color: '#3b82f6' }}>₦{(day.card_total || 0).toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '10px', color: '#6b7280' }}>📱 Transfer</div>
+                        <div style={{ fontWeight: 'bold', color: '#8b5cf6' }}>₦{(day.transfer_total || 0).toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '10px', color: '#6b7280' }}>💰 Cash+Transfer</div>
+                        <div style={{ fontWeight: 'bold', color: '#f59e0b' }}>₦{(day.cash_transfer_total || 0).toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '10px', color: '#6b7280' }}>📋 Outstanding</div>
+                        <div style={{ fontWeight: 'bold', color: '#ef4444' }}>₦{(day.outstanding_total || 0).toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '10px', color: '#6b7280' }}>📊 Total</div>
+                        <div style={{ fontWeight: 'bold', color: '#22c55e' }}>₦{day.total_sales.toLocaleString()}</div>
+                      </div>
+                    </div>
+                    
                     <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                      <div><span style={{ fontSize: '12px', color: '#6b7280' }}>Total:</span> <strong>₦{day.total_sales.toLocaleString()}</strong></div>
-                      <div><span style={{ fontSize: '12px', color: '#6b7280' }}>Outstanding:</span> <strong style={{ color: '#ef4444' }}>₦{day.outstanding.toLocaleString()}</strong></div>
                       <div><span style={{ fontSize: '12px', color: '#6b7280' }}>Orders:</span> <strong>{day.count}</strong></div>
+                      <div><span style={{ fontSize: '12px', color: '#6b7280' }}>Outstanding:</span> <strong style={{ color: '#ef4444' }}>₦{day.outstanding.toLocaleString()}</strong></div>
                     </div>
                     
                     <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '8px' }}>📋 Invoices</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '400px', overflowY: 'auto' }}>
-                      {day.invoices.map((invoice: any, invIdx: number) => (
-                        <div
-                          key={invIdx}
-                          style={{
-                            background: 'white',
-                            borderRadius: '8px',
-                            padding: '12px',
-                            border: '1px solid #e5e7eb'
-                          }}
-                        >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontWeight: 'bold', fontSize: '13px' }}>{invoice.invoice_number}</div>
-                              <div 
-                                style={{ 
-                                  fontSize: '11px', 
-                                  color: invoice.customer_name !== 'Walk-in Customer' ? '#3b82f6' : '#6b7280',
-                                  textDecoration: invoice.customer_name !== 'Walk-in Customer' ? 'underline' : 'none',
-                                  cursor: invoice.customer_name !== 'Walk-in Customer' ? 'pointer' : 'default'
-                                }}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  if (invoice.customer_name !== 'Walk-in Customer' && invoice.customer_id && onViewCustomer) {
-                                    onViewCustomer(invoice.customer_id)
-                                  }
-                                }}
-                              >
-                                👤 {invoice.customer_name}
-                                {invoice.customer_name !== 'Walk-in Customer' && ' 🔍'}
+                      {day.invoices.map((invoice: any, invIdx: number) => {
+                        const methodLabel = invoice.payment_method === 'cash_transfer' ? 'Cash+Transfer' : 
+                                           invoice.payment_method === 'outstanding' ? 'Outstanding' :
+                                           invoice.payment_method?.charAt(0).toUpperCase() + invoice.payment_method?.slice(1) || 'Cash'
+                        return (
+                          <div
+                            key={invIdx}
+                            style={{
+                              background: 'white',
+                              borderRadius: '8px',
+                              padding: '12px',
+                              border: '1px solid #e5e7eb'
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontWeight: 'bold', fontSize: '13px' }}>{invoice.invoice_number}</div>
+                                <div 
+                                  style={{ 
+                                    fontSize: '11px', 
+                                    color: invoice.customer_name !== 'Walk-in Customer' ? '#3b82f6' : '#6b7280',
+                                    textDecoration: invoice.customer_name !== 'Walk-in Customer' ? 'underline' : 'none',
+                                    cursor: invoice.customer_name !== 'Walk-in Customer' ? 'pointer' : 'default'
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (invoice.customer_name !== 'Walk-in Customer' && invoice.customer_id && onViewCustomer) {
+                                      onViewCustomer(invoice.customer_id)
+                                    }
+                                  }}
+                                >
+                                  👤 {invoice.customer_name}
+                                  {invoice.customer_name !== 'Walk-in Customer' && ' 🔍'}
+                                </div>
+                              </div>
+                              <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontWeight: 'bold', fontSize: '14px', color: '#22c55e' }}>₦{invoice.total.toLocaleString()}</div>
+                                <div style={{ fontSize: '10px', color: invoice.payment_method === 'outstanding' ? '#ef4444' : '#6b7280' }}>
+                                  {methodLabel}
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    openInvoiceModal(invoice)
+                                  }}
+                                  style={{ background: '#3b82f6', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '10px', border: 'none', cursor: 'pointer' }}
+                                >
+                                  View
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setInvoiceToDelete(invoice)
+                                    setShowDeleteConfirm(true)
+                                  }}
+                                  style={{ background: '#ef4444', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '10px', border: 'none', cursor: 'pointer' }}
+                                >
+                                  Delete
+                                </button>
                               </div>
                             </div>
-                            <div style={{ textAlign: 'right' }}>
-                              <div style={{ fontWeight: 'bold', fontSize: '14px', color: '#22c55e' }}>₦{invoice.total.toLocaleString()}</div>
-                              <div style={{ fontSize: '10px', color: invoice.payment_method === 'outstanding' ? '#ef4444' : '#6b7280' }}>
-                                {invoice.payment_method}
-                              </div>
-                            </div>
-                            <div style={{ display: 'flex', gap: '6px' }}>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  openInvoiceModal(invoice)
-                                }}
-                                style={{ background: '#3b82f6', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '10px', border: 'none', cursor: 'pointer' }}
-                              >
-                                View
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  setInvoiceToDelete(invoice)
-                                  setShowDeleteConfirm(true)
-                                }}
-                                style={{ background: '#ef4444', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '10px', border: 'none', cursor: 'pointer' }}
-                              >
-                                Delete
-                              </button>
+                            <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                              {invoice.items && invoice.items.slice(0, 2).map((item: any, itemIdx: number) => (
+                                <span key={itemIdx} style={{ background: '#f3f4f6', padding: '2px 8px', borderRadius: '12px', fontSize: '10px' }}>
+                                  {item.name} x{item.quantity}
+                                </span>
+                              ))}
+                              {invoice.items && invoice.items.length > 2 && (
+                                <span style={{ fontSize: '10px', color: '#6b7280' }}>+{invoice.items.length - 2} more</span>
+                              )}
                             </div>
                           </div>
-                          <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                            {invoice.items && invoice.items.slice(0, 2).map((item: any, itemIdx: number) => (
-                              <span key={itemIdx} style={{ background: '#f3f4f6', padding: '2px 8px', borderRadius: '12px', fontSize: '10px' }}>
-                                {item.name} x{item.quantity}
-                              </span>
-                            ))}
-                            {invoice.items && invoice.items.length > 2 && (
-                              <span style={{ fontSize: '10px', color: '#6b7280' }}>+{invoice.items.length - 2} more</span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   </div>
                 )}
@@ -502,7 +577,8 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '12px', color: '#6b7280' }}>Payment Method</span>
                 <span style={{ color: selectedInvoice.payment_method === 'outstanding' ? '#ef4444' : '#22c55e', fontWeight: 'bold' }}>
-                  {selectedInvoice.payment_method}
+                  {selectedInvoice.payment_method === 'cash_transfer' ? 'Cash + Transfer' :
+                   selectedInvoice.payment_method?.charAt(0).toUpperCase() + selectedInvoice.payment_method?.slice(1) || 'Cash'}
                 </span>
               </div>
             </div>
