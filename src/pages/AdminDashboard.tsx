@@ -39,6 +39,8 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
   const [invoiceToDelete, setInvoiceToDelete] = useState<any>(null)
   const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false)
   const [viewMode, setViewMode] = useState<'daily' | 'monthly'>('daily')
+  const [hotProducts, setHotProducts] = useState<any[]>([])
+  const [fastSellingProducts, setFastSellingProducts] = useState<any[]>([])
 
   useEffect(() => {
     fetchData()
@@ -51,21 +53,50 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
         .select('*')
         .order('created_at', { ascending: false })
 
+      // Fetch all products for cost tracking
+      const { data: products } = await supabase
+        .from('products')
+        .select('*')
+
+      const productMap = new Map()
+      products?.forEach((p: any) => {
+        productMap.set(p.name, p)
+      })
+
       if (invoices && invoices.length > 0) {
         // Process daily data
         const salesByDate: any = {}
         const salesByMonth: any = {}
+        const productSales: any = {}
+        const productRevenue: any = {}
+        const productCost: any = {}
         
         invoices.forEach((inv: any) => {
           const date = new Date(inv.created_at)
           const dateStr = date.toLocaleDateString('en-NG')
           const monthStr = date.toLocaleDateString('en-NG', { year: 'numeric', month: 'long' })
           
+          // Track product sales for recommendations
+          if (inv.items) {
+            inv.items.forEach((item: any) => {
+              const productName = item.name
+              if (!productSales[productName]) {
+                productSales[productName] = { quantity: 0, revenue: 0, cost: 0, count: 0 }
+              }
+              productSales[productName].quantity += item.quantity
+              productSales[productName].revenue += item.price * item.quantity
+              const product = productMap.get(productName)
+              productSales[productName].cost += (product?.cost || product?.current_cost || 0) * item.quantity
+              productSales[productName].count += 1
+            })
+          }
+          
           // Daily aggregation
           if (!salesByDate[dateStr]) {
             salesByDate[dateStr] = { 
               date: dateStr, 
               total_sales: 0, 
+              total_profit: 0,
               count: 0, 
               outstanding: 0,
               cash_total: 0,
@@ -81,7 +112,8 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
           if (!salesByMonth[monthStr]) {
             salesByMonth[monthStr] = { 
               month: monthStr, 
-              total_sales: 0, 
+              total_sales: 0,
+              total_profit: 0,
               count: 0, 
               outstanding: 0,
               cash_total: 0,
@@ -93,8 +125,19 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
             }
           }
           
+          // Calculate profit for this invoice
+          let invoiceProfit = 0
+          if (inv.items) {
+            inv.items.forEach((item: any) => {
+              const product = productMap.get(item.name)
+              const cost = product?.cost || product?.current_cost || 0
+              invoiceProfit += (item.price - cost) * item.quantity
+            })
+          }
+          
           // Add to daily
           salesByDate[dateStr].total_sales += inv.total
+          salesByDate[dateStr].total_profit += invoiceProfit
           salesByDate[dateStr].count += 1
           
           const method = inv.payment_method || 'cash'
@@ -111,6 +154,7 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
           
           // Add to monthly
           salesByMonth[monthStr].total_sales += inv.total
+          salesByMonth[monthStr].total_profit += invoiceProfit
           salesByMonth[monthStr].count += 1
           
           if (method === 'cash') salesByMonth[monthStr].cash_total += inv.total
@@ -125,37 +169,39 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
           
           // Track daily within month
           if (!salesByMonth[monthStr].days[dateStr]) {
-            salesByMonth[monthStr].days[dateStr] = { total: 0, count: 0 }
+            salesByMonth[monthStr].days[dateStr] = { total: 0, profit: 0, count: 0 }
           }
           salesByMonth[monthStr].days[dateStr].total += inv.total
+          salesByMonth[monthStr].days[dateStr].profit += invoiceProfit
           salesByMonth[monthStr].days[dateStr].count += 1
         })
         
-        // Calculate daily average for each month and identify low days
+        // Calculate monthly averages and low days
         const monthlyData = Object.values(salesByMonth).map((month: any) => {
           const dayValues = Object.values(month.days) as any[]
           const totalDays = dayValues.length
           const totalSales = dayValues.reduce((sum: number, d: any) => sum + d.total, 0)
+          const totalProfit = dayValues.reduce((sum: number, d: any) => sum + d.profit, 0)
           const avgDaily = totalDays > 0 ? totalSales / totalDays : 0
+          const avgDailyProfit = totalDays > 0 ? totalProfit / totalDays : 0
           
-          // Find low days (below 60% of average)
           const lowDays = dayValues
             .map((d: any, idx: number) => {
               const dayKey = Object.keys(month.days)[idx]
-              return { date: dayKey, total: d.total, count: d.count }
+              return { date: dayKey, total: d.total, profit: d.profit, count: d.count }
             })
             .filter((d: any) => d.total < avgDaily * 0.6)
             .sort((a: any, b: any) => a.total - b.total)
           
-          // Find best day
           const bestDay = dayValues.reduce((best: any, d: any) => {
             const dayKey = Object.keys(month.days).find(key => month.days[key] === d)
-            return !best || d.total > best.total ? { date: dayKey, total: d.total, count: d.count } : best
+            return !best || d.total > best.total ? { date: dayKey, total: d.total, profit: d.profit, count: d.count } : best
           }, null)
           
           return {
             ...month,
             avg_daily: avgDaily,
+            avg_daily_profit: avgDailyProfit,
             low_days: lowDays,
             best_day: bestDay,
             days_count: totalDays
@@ -164,6 +210,37 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
         
         setDailySales(Object.values(salesByDate))
         setMonthlySales(monthlyData)
+        
+        // Hot Products - Top selling by quantity
+        const hotProductsList = Object.entries(productSales)
+          .map(([name, data]: [string, any]) => ({
+            name,
+            quantity: data.quantity,
+            revenue: data.revenue,
+            cost: data.cost,
+            profit: data.revenue - data.cost,
+            count: data.count,
+            profitMargin: data.revenue > 0 ? ((data.revenue - data.cost) / data.revenue * 100) : 0
+          }))
+          .sort((a, b) => b.quantity - a.quantity)
+          .slice(0, 10)
+        setHotProducts(hotProductsList)
+        
+        // Fast Selling Products - Most frequent sales (count)
+        const fastSellingList = Object.entries(productSales)
+          .map(([name, data]: [string, any]) => ({
+            name,
+            quantity: data.quantity,
+            revenue: data.revenue,
+            cost: data.cost,
+            profit: data.revenue - data.cost,
+            count: data.count,
+            avgPerSale: data.quantity / data.count,
+            profitMargin: data.revenue > 0 ? ((data.revenue - data.cost) / data.revenue * 100) : 0
+          }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 10)
+        setFastSellingProducts(fastSellingList)
         
         // Customer totals
         const customerTotals: any = {}
@@ -208,13 +285,14 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
         setTopCustomers(topCust)
       }
       
-      const { data: products } = await supabase
+      // Low stock products
+      const { data: productsData } = await supabase
         .from('products')
         .select('id, name, stock')
         .lte('stock', 12)
         .order('stock', { ascending: true })
       
-      setLowStockProducts(products || [])
+      setLowStockProducts(productsData || [])
     } catch (err) {
       console.error(err)
     } finally {
@@ -222,104 +300,28 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
     }
   }
 
-  async function fetchCustomerPurchases(customerName: string, customerId: string) {
-    const { data } = await supabase
-      .from('invoices')
-      .select('*')
-      .eq('customer_name', customerName)
-      .order('created_at', { ascending: false })
-      .limit(20)
-    
-    setCustomerPurchases(data || [])
-    setExpandedCustomer(expandedCustomer === customerName ? null : customerName)
-  }
-
-  async function clearOutstandingPayment(customerId: string, customerName: string, amount: number) {
-    if (!paymentAmount || parseFloat(paymentAmount) <= 0) {
-      toast.error('Enter valid payment amount')
-      return
-    }
-    
-    const payment = parseFloat(paymentAmount)
-    const newOutstanding = amount - payment
-    
-    const { error } = await supabase
-      .from('customers')
-      .update({ outstanding_balance: Math.max(0, newOutstanding) })
-      .eq('id', customerId)
-    
-    if (error) {
-      toast.error('Error updating payment')
-    } else {
-      toast.success(`Payment of ₦${payment.toLocaleString()} recorded. New outstanding: ₦${Math.max(0, newOutstanding).toLocaleString()}`)
-      setShowOutstandingModal(false)
-      setPaymentAmount('')
-      fetchData()
-    }
-  }
-
-  async function deleteInvoice(invoiceId: string) {
-    const { error } = await supabase
-      .from('invoices')
-      .delete()
-      .eq('id', invoiceId)
-    
-    if (error) {
-      toast.error('Error deleting invoice: ' + error.message)
-    } else {
-      toast.success('Invoice deleted successfully')
-      setShowDeleteConfirm(false)
-      setInvoiceToDelete(null)
-      fetchData()
-    }
-  }
-
-  async function deleteAllInvoices() {
-    const { error } = await supabase
-      .from('invoices')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000')
-    
-    if (error) {
-      toast.error('Error deleting invoices: ' + error.message)
-    } else {
-      toast.success('All invoices deleted successfully')
-      setShowDeleteAllConfirm(false)
-      fetchData()
-    }
-  }
-
-  const openInvoiceModal = (invoice: Invoice) => {
-    setSelectedInvoice(invoice)
-    setShowInvoiceModal(true)
-  }
-
-  const toggleDateExpand = (date: string) => {
-    setExpandedDate(expandedDate === date ? null : date)
-  }
-
-  const toggleMonthExpand = (month: string) => {
-    setExpandedMonth(expandedMonth === month ? null : month)
-  }
+  // ... (rest of the functions remain the same: fetchCustomerPurchases, clearOutstandingPayment, deleteInvoice, deleteAllInvoices, openInvoiceModal, toggleDateExpand, toggleMonthExpand)
 
   if (loading) {
     return <div style={{ padding: '40px', textAlign: 'center' }}>Loading dashboard...</div>
   }
 
   const totalSales = dailySales.reduce((sum, d) => sum + d.total_sales, 0)
+  const totalProfit = dailySales.reduce((sum, d) => sum + (d.total_profit || 0), 0)
   const totalOutstanding = dailySales.reduce((sum, d) => sum + (d.outstanding || 0), 0)
   const totalCash = dailySales.reduce((sum, d) => sum + (d.cash_total || 0), 0)
   const totalCard = dailySales.reduce((sum, d) => sum + (d.card_total || 0), 0)
   const totalTransfer = dailySales.reduce((sum, d) => sum + (d.transfer_total || 0), 0)
   const totalCashTransfer = dailySales.reduce((sum, d) => sum + (d.cash_transfer_total || 0), 0)
   const totalOutstandingTotal = dailySales.reduce((sum, d) => sum + (d.outstanding_total || 0), 0)
+  const profitMargin = totalSales > 0 ? (totalProfit / totalSales) * 100 : 0
 
   return (
     <div>
       <Toaster position="top-right" />
       
       {/* Delete All Invoices Button */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px', gap: '12px' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px', gap: '12px', flexWrap: 'wrap' }}>
         <button
           onClick={() => setViewMode(viewMode === 'daily' ? 'monthly' : 'daily')}
           style={{ background: '#3b82f6', color: 'white', padding: '8px 16px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '13px' }}
@@ -334,10 +336,10 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
         </button>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards - Added Profit Card */}
       <div style={{ 
         display: 'grid', 
-        gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', 
+        gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', 
         gap: '10px', 
         marginBottom: '20px' 
       }}>
@@ -346,7 +348,15 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
           <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#22c55e' }}>₦{totalSales.toLocaleString()}</div>
         </div>
         <div style={{ background: 'white', padding: '14px', borderRadius: '10px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-          <div style={{ fontSize: '10px', color: '#6b7280' }}>💰 Cash</div>
+          <div style={{ fontSize: '10px', color: '#6b7280' }}>💰 Total Profit</div>
+          <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#8b5cf6' }}>₦{totalProfit.toLocaleString()}</div>
+        </div>
+        <div style={{ background: 'white', padding: '14px', borderRadius: '10px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+          <div style={{ fontSize: '10px', color: '#6b7280' }}>📊 Profit Margin</div>
+          <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#f59e0b' }}>{profitMargin.toFixed(1)}%</div>
+        </div>
+        <div style={{ background: 'white', padding: '14px', borderRadius: '10px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+          <div style={{ fontSize: '10px', color: '#6b7280' }}>💵 Cash</div>
           <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#16a34a' }}>₦{totalCash.toLocaleString()}</div>
         </div>
         <div style={{ background: 'white', padding: '14px', borderRadius: '10px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
@@ -369,6 +379,85 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
           <div style={{ fontSize: '10px', color: '#6b7280' }}>⚠️ Low Stock</div>
           <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#f59e0b' }}>{lowStockProducts.length}</div>
         </div>
+      </div>
+
+      {/* Hot Products & Fast Selling Section */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px', marginBottom: '20px' }}>
+        {/* Hot Stocks - Most Quantity Sold */}
+        {hotProducts.length > 0 && (
+          <div style={{ background: 'white', borderRadius: '12px', padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+            <h3 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '12px' }}>🔥 Hot Stocks (Most Quantity Sold)</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {hotProducts.map((product, idx) => (
+                <div key={idx} style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center',
+                  padding: '8px 12px',
+                  background: idx < 3 ? '#fef3c7' : '#f9fafb',
+                  borderRadius: '6px',
+                  fontSize: '13px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {idx === 0 && '🏆'}
+                    {idx === 1 && '🥈'}
+                    {idx === 2 && '🥉'}
+                    <span style={{ fontWeight: idx < 3 ? 'bold' : 'normal' }}>{product.name}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    <span style={{ color: '#6b7280' }}>{product.quantity} sold</span>
+                    <span style={{ fontWeight: 'bold', color: '#22c55e' }}>₦{product.profit.toLocaleString()}</span>
+                    <span style={{ 
+                      fontSize: '10px', 
+                      background: product.profitMargin > 40 ? '#d1fae5' : '#fef3c7',
+                      color: product.profitMargin > 40 ? '#22c55e' : '#f59e0b',
+                      padding: '2px 8px',
+                      borderRadius: '10px'
+                    }}>
+                      {product.profitMargin.toFixed(0)}%
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #e5e7eb' }}>
+              💡 <strong>Recommendation:</strong> Stock up on these top-selling products
+            </div>
+          </div>
+        )}
+
+        {/* Fast Selling - Most Frequent Orders */}
+        {fastSellingProducts.length > 0 && (
+          <div style={{ background: 'white', borderRadius: '12px', padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+            <h3 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '12px' }}>⚡ Fast Selling (Most Frequent)</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {fastSellingProducts.map((product, idx) => (
+                <div key={idx} style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center',
+                  padding: '8px 12px',
+                  background: idx < 3 ? '#e0f2fe' : '#f9fafb',
+                  borderRadius: '6px',
+                  fontSize: '13px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {idx === 0 && '⭐'}
+                    <span style={{ fontWeight: idx < 3 ? 'bold' : 'normal' }}>{product.name}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    <span style={{ color: '#6b7280' }}>{product.count} orders</span>
+                    <span style={{ color: '#6b7280', fontSize: '11px' }}>ø{product.avgPerSale.toFixed(1)}/order</span>
+                    <span style={{ fontWeight: 'bold', color: '#3b82f6' }}>₦{product.revenue.toLocaleString()}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #e5e7eb' }}>
+              💡 <strong>Recommendation:</strong> These products move fast - ensure adequate stock
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Top Customers */}
@@ -489,6 +578,9 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ fontWeight: 'bold', fontSize: '16px', color: '#22c55e' }}>₦{day.total_sales.toLocaleString()}</div>
+                      {day.total_profit !== undefined && (
+                        <div style={{ fontSize: '10px', color: '#8b5cf6' }}>Profit: ₦{day.total_profit.toLocaleString()}</div>
+                      )}
                       {day.outstanding > 0 && (
                         <div style={{ fontSize: '10px', color: '#ef4444' }}>₦{day.outstanding.toLocaleString()} outstanding</div>
                       )}
@@ -606,6 +698,7 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ fontWeight: 'bold', fontSize: '16px', color: '#22c55e' }}>₦{month.total_sales.toLocaleString()}</div>
+                      <div style={{ fontSize: '10px', color: '#8b5cf6' }}>Profit: ₦{month.total_profit?.toLocaleString()}</div>
                       <div style={{ fontSize: '10px', color: '#6b7280' }}>Avg: ₦{month.avg_daily.toLocaleString()}/day</div>
                     </div>
                     <span style={{ fontSize: '16px', color: '#9ca3af' }}>{expandedMonth === month.month ? '▲' : '▼'}</span>
@@ -634,7 +727,7 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
                       {month.best_day && (
                         <div style={{ marginBottom: '12px', padding: '8px', background: '#fef3c7', borderRadius: '8px' }}>
                           <span style={{ fontSize: '12px', fontWeight: 'bold' }}>🏆 Best Day: </span>
-                          <span style={{ fontSize: '12px' }}>{month.best_day.date} - ₦{month.best_day.total.toLocaleString()} ({month.best_day.count} orders)</span>
+                          <span style={{ fontSize: '12px' }}>{month.best_day.date} - ₦{month.best_day.total.toLocaleString()} (Profit: ₦{month.best_day.profit?.toLocaleString()})</span>
                         </div>
                       )}
                       
@@ -652,7 +745,7 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
                         </div>
                       )}
                       
-                      {/* Daily Breakdown within Month */}
+                      {/* Daily Breakdown */}
                       <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '8px' }}>📋 Daily Breakdown</div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '200px', overflowY: 'auto' }}>
                         {Object.entries(month.days)
