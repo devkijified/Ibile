@@ -300,7 +300,85 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
     }
   }
 
-  // ... (rest of the functions remain the same: fetchCustomerPurchases, clearOutstandingPayment, deleteInvoice, deleteAllInvoices, openInvoiceModal, toggleDateExpand, toggleMonthExpand)
+  async function fetchCustomerPurchases(customerName: string, customerId: string) {
+    const { data } = await supabase
+      .from('invoices')
+      .select('*')
+      .eq('customer_name', customerName)
+      .order('created_at', { ascending: false })
+      .limit(20)
+    
+    setCustomerPurchases(data || [])
+    setExpandedCustomer(expandedCustomer === customerName ? null : customerName)
+  }
+
+  async function clearOutstandingPayment(customerId: string, customerName: string, amount: number) {
+    if (!paymentAmount || parseFloat(paymentAmount) <= 0) {
+      toast.error('Enter valid payment amount')
+      return
+    }
+    
+    const payment = parseFloat(paymentAmount)
+    const newOutstanding = amount - payment
+    
+    const { error } = await supabase
+      .from('customers')
+      .update({ outstanding_balance: Math.max(0, newOutstanding) })
+      .eq('id', customerId)
+    
+    if (error) {
+      toast.error('Error updating payment')
+    } else {
+      toast.success(`Payment of ₦${payment.toLocaleString()} recorded. New outstanding: ₦${Math.max(0, newOutstanding).toLocaleString()}`)
+      setShowOutstandingModal(false)
+      setPaymentAmount('')
+      fetchData()
+    }
+  }
+
+  async function deleteInvoice(invoiceId: string) {
+    const { error } = await supabase
+      .from('invoices')
+      .delete()
+      .eq('id', invoiceId)
+    
+    if (error) {
+      toast.error('Error deleting invoice: ' + error.message)
+    } else {
+      toast.success('Invoice deleted successfully')
+      setShowDeleteConfirm(false)
+      setInvoiceToDelete(null)
+      fetchData()
+    }
+  }
+
+  async function deleteAllInvoices() {
+    const { error } = await supabase
+      .from('invoices')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000')
+    
+    if (error) {
+      toast.error('Error deleting invoices: ' + error.message)
+    } else {
+      toast.success('All invoices deleted successfully')
+      setShowDeleteAllConfirm(false)
+      fetchData()
+    }
+  }
+
+  const openInvoiceModal = (invoice: Invoice) => {
+    setSelectedInvoice(invoice)
+    setShowInvoiceModal(true)
+  }
+
+  const toggleDateExpand = (date: string) => {
+    setExpandedDate(expandedDate === date ? null : date)
+  }
+
+  const toggleMonthExpand = (month: string) => {
+    setExpandedMonth(expandedMonth === month ? null : month)
+  }
 
   if (loading) {
     return <div style={{ padding: '40px', textAlign: 'center' }}>Loading dashboard...</div>
@@ -336,7 +414,7 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
         </button>
       </div>
 
-      {/* Stats Cards - Added Profit Card */}
+      {/* Stats Cards */}
       <div style={{ 
         display: 'grid', 
         gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', 
@@ -383,7 +461,6 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
 
       {/* Hot Products & Fast Selling Section */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px', marginBottom: '20px' }}>
-        {/* Hot Stocks - Most Quantity Sold */}
         {hotProducts.length > 0 && (
           <div style={{ background: 'white', borderRadius: '12px', padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
             <h3 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '12px' }}>🔥 Hot Stocks (Most Quantity Sold)</h3>
@@ -426,7 +503,6 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
           </div>
         )}
 
-        {/* Fast Selling - Most Frequent Orders */}
         {fastSellingProducts.length > 0 && (
           <div style={{ background: 'white', borderRadius: '12px', padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
             <h3 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '12px' }}>⚡ Fast Selling (Most Frequent)</h3>
@@ -539,7 +615,6 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
 
       {/* View Mode: Daily or Monthly */}
       {viewMode === 'daily' ? (
-        // Daily View
         <div style={{ marginBottom: '20px' }}>
           <h3 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '12px' }}>📅 Daily Sales Records</h3>
           {dailySales.length === 0 ? (
@@ -659,7 +734,6 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
           )}
         </div>
       ) : (
-        // Monthly View
         <div style={{ marginBottom: '20px' }}>
           <h3 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '12px' }}>📊 Monthly Sales Records</h3>
           {monthlySales.length === 0 ? (
@@ -706,7 +780,6 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
                   
                   {expandedMonth === month.month && (
                     <div style={{ padding: '12px', borderTop: '1px solid #e5e7eb', background: '#f9fafb' }}>
-                      {/* Monthly Payment Summary */}
                       <div style={{ 
                         display: 'grid', 
                         gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', 
@@ -723,7 +796,6 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
                         <div><div style={{ fontSize: '10px', color: '#6b7280' }}>📋 Outstanding</div><div style={{ fontWeight: 'bold', color: '#ef4444' }}>₦{(month.outstanding_total || 0).toLocaleString()}</div></div>
                       </div>
                       
-                      {/* Best Day */}
                       {month.best_day && (
                         <div style={{ marginBottom: '12px', padding: '8px', background: '#fef3c7', borderRadius: '8px' }}>
                           <span style={{ fontSize: '12px', fontWeight: 'bold' }}>🏆 Best Day: </span>
@@ -731,7 +803,6 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
                         </div>
                       )}
                       
-                      {/* Low Days Alert */}
                       {month.low_days && month.low_days.length > 0 && (
                         <div style={{ marginBottom: '12px', padding: '8px', background: '#fee2e2', borderRadius: '8px', borderLeft: '3px solid #ef4444' }}>
                           <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#dc2626' }}>⚠️ Low Sales Days (Below 60% of average)</div>
@@ -745,7 +816,6 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
                         </div>
                       )}
                       
-                      {/* Daily Breakdown */}
                       <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '8px' }}>📋 Daily Breakdown</div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '200px', overflowY: 'auto' }}>
                         {Object.entries(month.days)
