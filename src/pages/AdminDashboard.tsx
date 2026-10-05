@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { toast, Toaster } from 'react-hot-toast'
+import { downloadCSV, generateCSV } from '../lib/exportUtils'
 
 interface Invoice {
   id: string
@@ -53,7 +54,6 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
         .select('*')
         .order('created_at', { ascending: false })
 
-      // Fetch all products for cost tracking
       const { data: products } = await supabase
         .from('products')
         .select('*')
@@ -64,7 +64,6 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
       })
 
       if (invoices && invoices.length > 0) {
-        // Process daily data
         const salesByDate: any = {}
         const salesByMonth: any = {}
         const productSales: any = {}
@@ -76,7 +75,6 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
           const dateStr = date.toLocaleDateString('en-NG')
           const monthStr = date.toLocaleDateString('en-NG', { year: 'numeric', month: 'long' })
           
-          // Track product sales for recommendations
           if (inv.items) {
             inv.items.forEach((item: any) => {
               const productName = item.name
@@ -91,7 +89,6 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
             })
           }
           
-          // Daily aggregation
           if (!salesByDate[dateStr]) {
             salesByDate[dateStr] = { 
               date: dateStr, 
@@ -108,7 +105,6 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
             }
           }
           
-          // Monthly aggregation
           if (!salesByMonth[monthStr]) {
             salesByMonth[monthStr] = { 
               month: monthStr, 
@@ -125,7 +121,6 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
             }
           }
           
-          // Calculate profit for this invoice
           let invoiceProfit = 0
           if (inv.items) {
             inv.items.forEach((item: any) => {
@@ -135,7 +130,6 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
             })
           }
           
-          // Add to daily
           salesByDate[dateStr].total_sales += inv.total
           salesByDate[dateStr].total_profit += invoiceProfit
           salesByDate[dateStr].count += 1
@@ -152,7 +146,6 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
           }
           salesByDate[dateStr].invoices.push(inv)
           
-          // Add to monthly
           salesByMonth[monthStr].total_sales += inv.total
           salesByMonth[monthStr].total_profit += invoiceProfit
           salesByMonth[monthStr].count += 1
@@ -167,7 +160,6 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
             salesByMonth[monthStr].outstanding += inv.total
           }
           
-          // Track daily within month
           if (!salesByMonth[monthStr].days[dateStr]) {
             salesByMonth[monthStr].days[dateStr] = { total: 0, profit: 0, count: 0 }
           }
@@ -176,7 +168,6 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
           salesByMonth[monthStr].days[dateStr].count += 1
         })
         
-        // Calculate monthly averages and low days
         const monthlyData = Object.values(salesByMonth).map((month: any) => {
           const dayValues = Object.values(month.days) as any[]
           const totalDays = dayValues.length
@@ -211,7 +202,6 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
         setDailySales(Object.values(salesByDate))
         setMonthlySales(monthlyData)
         
-        // Hot Products - Top selling by quantity
         const hotProductsList = Object.entries(productSales)
           .map(([name, data]: [string, any]) => ({
             name,
@@ -226,7 +216,6 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
           .slice(0, 10)
         setHotProducts(hotProductsList)
         
-        // Fast Selling Products - Most frequent sales (count)
         const fastSellingList = Object.entries(productSales)
           .map(([name, data]: [string, any]) => ({
             name,
@@ -242,7 +231,6 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
           .slice(0, 10)
         setFastSellingProducts(fastSellingList)
         
-        // Customer totals
         const customerTotals: any = {}
         invoices.forEach((inv: any) => {
           if (inv.customer_name && inv.customer_name !== 'Walk-in Customer') {
@@ -285,7 +273,6 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
         setTopCustomers(topCust)
       }
       
-      // Low stock products
       const { data: productsData } = await supabase
         .from('products')
         .select('id, name, stock')
@@ -380,6 +367,66 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
     setExpandedMonth(expandedMonth === month ? null : month)
   }
 
+  function exportOrdersToCSV() {
+    const allInvoices: any[] = []
+    dailySales.forEach((day: any) => {
+      if (day.invoices) {
+        day.invoices.forEach((inv: any) => {
+          allInvoices.push(inv)
+        })
+      }
+    })
+
+    if (allInvoices.length === 0) {
+      toast.error('No orders to export')
+      return
+    }
+
+    allInvoices.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+
+    const headers = [
+      'Invoice Number',
+      'Customer Name',
+      'Date',
+      'Time',
+      'Items',
+      'Subtotal',
+      'Tax',
+      'Total',
+      'Payment Method',
+      'Status'
+    ]
+
+    const rows = allInvoices.map((inv: any) => {
+      const itemsList = (inv.items || []).map((item: any) => 
+        `${item.name} x${item.quantity} @${item.price}`
+      ).join('; ')
+      
+      const dateObj = new Date(inv.created_at)
+      const paymentLabel = inv.payment_method === 'cash_transfer' ? 'Cash+Transfer' :
+                           inv.payment_method === 'outstanding' ? 'Outstanding' :
+                           inv.payment_method?.charAt(0).toUpperCase() + inv.payment_method?.slice(1) || 'Cash'
+      
+      return [
+        inv.invoice_number,
+        inv.customer_name,
+        dateObj.toLocaleDateString('en-NG'),
+        dateObj.toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' }),
+        itemsList,
+        inv.subtotal || 0,
+        inv.tax || 0,
+        inv.total,
+        paymentLabel,
+        inv.tab_status || 'paid'
+      ]
+    })
+
+    const csv = generateCSV(headers, rows)
+    const filename = `orders_export_${new Date().toISOString().split('T')[0]}.csv`
+    downloadCSV(csv, filename)
+    toast.success(`Exported ${allInvoices.length} orders`)
+  }
+
   if (loading) {
     return <div style={{ padding: '40px', textAlign: 'center' }}>Loading dashboard...</div>
   }
@@ -398,13 +445,19 @@ function AdminDashboard({ onViewCustomer }: AdminDashboardProps) {
     <div>
       <Toaster position="top-right" />
       
-      {/* Delete All Invoices Button */}
+      {/* Button Row with Export */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px', gap: '12px', flexWrap: 'wrap' }}>
         <button
           onClick={() => setViewMode(viewMode === 'daily' ? 'monthly' : 'daily')}
           style={{ background: '#3b82f6', color: 'white', padding: '8px 16px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '13px' }}
         >
           {viewMode === 'daily' ? '📊 View Monthly' : '📅 View Daily'}
+        </button>
+        <button
+          onClick={exportOrdersToCSV}
+          style={{ background: '#8b5cf6', color: 'white', padding: '8px 16px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '13px' }}
+        >
+          📥 Export Orders
         </button>
         <button
           onClick={() => setShowDeleteAllConfirm(true)}
