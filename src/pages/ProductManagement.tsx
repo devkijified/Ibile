@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { toast, Toaster } from 'react-hot-toast'
+import { downloadCSV, generateCSV } from '../lib/exportUtils'
 
 function ProductManagement() {
   const [products, setProducts] = useState<any[]>([])
@@ -115,6 +116,45 @@ function ProductManagement() {
     }
   }
 
+  function exportProductsToCSV() {
+    if (products.length === 0) {
+      toast.error('No products to export')
+      return
+    }
+
+    const headers = [
+      'Product Name', 'SKU', 'Category', 'Selling Price', 'Cost Price', 
+      'Stock', 'Total Cost Value', 'Total Selling Value', 'Potential Profit', 'Profit Margin %'
+    ]
+
+    const rows = products.map(p => {
+      const cost = p.cost || p.current_cost || 0
+      const stock = p.stock || 0
+      const totalCost = cost * stock
+      const totalValue = p.price * stock
+      const profit = totalValue - totalCost
+      const margin = p.price > 0 ? ((p.price - cost) / p.price * 100).toFixed(1) : '0'
+      
+      return [
+        p.name,
+        p.sku || '',
+        p.category || '',
+        p.price,
+        cost,
+        stock,
+        totalCost,
+        totalValue,
+        profit,
+        margin
+      ]
+    })
+
+    const csv = generateCSV(headers, rows)
+    const filename = `products_export_${new Date().toISOString().split('T')[0]}.csv`
+    downloadCSV(csv, filename)
+    toast.success(`Exported ${products.length} products`)
+  }
+
   const filteredProducts = products.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase())
   )
@@ -178,14 +218,20 @@ function ProductManagement() {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <h2 style={{ fontSize: '20px', fontWeight: 'bold' }}>Product Management</h2>
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
           <input
             type="text"
             placeholder="Search products..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            style={{ padding: '8px 12px', border: '1px solid #ccc', borderRadius: '6px', width: '200px' }}
+            style={{ padding: '8px 12px', border: '1px solid #ccc', borderRadius: '6px', width: '180px' }}
           />
+          <button
+            onClick={exportProductsToCSV}
+            style={{ background: '#8b5cf6', color: 'white', padding: '8px 16px', borderRadius: '6px', border: 'none', cursor: 'pointer' }}
+          >
+            📥 Export CSV
+          </button>
           <button
             onClick={() => {
               setEditingProduct(null)
@@ -283,7 +329,7 @@ function ProductManagement() {
         </div>
       )}
 
-      {/* Add/Edit Product Modal with Stock Field */}
+      {/* Add/Edit Product Modal */}
       {showModal && (
         <div className="modal-overlay">
           <div className="modal" style={{ width: '500px', maxHeight: '90vh', overflowY: 'auto' }}>
@@ -362,7 +408,6 @@ function ProductManagement() {
               />
             </div>
             
-            {/* Stock Field - Prominently displayed for easy editing */}
             <div style={{ marginBottom: '16px' }}>
               <label style={{ fontSize: '13px', fontWeight: 'bold', display: 'block', marginBottom: '4px', color: '#1f2937' }}>
                 📦 Current Stock Quantity
