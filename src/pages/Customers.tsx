@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { toast, Toaster } from 'react-hot-toast'
+import { downloadCSV, generateCSV } from '../lib/exportUtils'
 
 interface Customer {
   id: string
@@ -66,6 +67,38 @@ function Customers({ onViewCustomer }: CustomersProps) {
     }
   }
 
+  function exportCustomersToCSV() {
+    if (customers.length === 0) {
+      toast.error('No customers to export')
+      return
+    }
+
+    const headers = [
+      'Customer Name',
+      'Phone Number',
+      'Email',
+      'Outstanding Balance',
+      'Total Spent',
+      'Loyalty Points',
+      'Date Joined'
+    ]
+
+    const rows = customers.map(c => [
+      c.name,
+      c.phone || '',
+      c.email || '',
+      c.outstanding_balance || 0,
+      c.total_spent || 0,
+      c.loyalty_points || 0,
+      new Date(c.created_at).toLocaleDateString('en-NG')
+    ])
+
+    const csv = generateCSV(headers, rows)
+    const filename = `customers_export_${new Date().toISOString().split('T')[0]}.csv`
+    downloadCSV(csv, filename)
+    toast.success(`Exported ${customers.length} customers`)
+  }
+
   const filteredCustomers = customers.filter(c => 
     c.name.toLowerCase().includes(search.toLowerCase()) ||
     (c.phone && c.phone.includes(search))
@@ -83,11 +116,53 @@ function Customers({ onViewCustomer }: CustomersProps) {
       <Toaster position="top-right" />
       <div className="customers-header">
         <h1 className="customers-title">Customer Management</h1>
-        <button onClick={() => setShowModal(true)} className="new-customer-btn">+ New Customer</button>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <button
+            onClick={exportCustomersToCSV}
+            style={{ background: '#8b5cf6', color: 'white', padding: '8px 16px', borderRadius: '6px', border: 'none', cursor: 'pointer' }}
+          >
+            📥 Export CSV
+          </button>
+          <button onClick={() => setShowModal(true)} className="new-customer-btn">
+            + New Customer
+          </button>
+        </div>
       </div>
 
       <div style={{ marginBottom: '16px' }}>
-        <input type="text" placeholder="🔍 Search by name or phone..." value={search} onChange={(e) => setSearch(e.target.value)} className="search-input" style={{ width: '100%', padding: '10px' }} />
+        <input
+          type="text"
+          placeholder="🔍 Search by name or phone..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="search-input"
+          style={{ width: '100%', padding: '10px' }}
+        />
+      </div>
+
+      {/* Stats Summary */}
+      <div style={{ 
+        display: 'grid', 
+        gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', 
+        gap: '12px', 
+        marginBottom: '20px' 
+      }}>
+        <div style={{ background: 'white', padding: '12px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+          <div style={{ fontSize: '11px', color: '#6b7280' }}>Total Customers</div>
+          <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{customers.length}</div>
+        </div>
+        <div style={{ background: 'white', padding: '12px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+          <div style={{ fontSize: '11px', color: '#6b7280' }}>Total Points</div>
+          <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#8b5cf6' }}>
+            {customers.reduce((sum, c) => sum + (c.loyalty_points || 0), 0)}
+          </div>
+        </div>
+        <div style={{ background: 'white', padding: '12px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+          <div style={{ fontSize: '11px', color: '#6b7280' }}>Total Outstanding</div>
+          <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#ef4444' }}>
+            ₦{customers.reduce((sum, c) => sum + (c.outstanding_balance || 0), 0).toLocaleString()}
+          </div>
+        </div>
       </div>
 
       {loading ? (
@@ -112,7 +187,6 @@ function Customers({ onViewCustomer }: CustomersProps) {
                   <tr key={customer.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
                     <td style={{ padding: '12px' }}>
                       <div style={{ fontWeight: 'bold' }}>{customer.name}</div>
-                      
                     </td>
                     <td style={{ padding: '12px' }}>
                       {customer.phone && <div style={{ fontSize: '12px' }}>{customer.phone}</div>}
